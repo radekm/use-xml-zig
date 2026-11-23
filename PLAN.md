@@ -60,7 +60,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 
 - [x] **M0 — Project setup:** `AGENTS`, `PLAN`, `README` (EN + CS), `build.zig` skeleton.
 - [x] **M1 — API design:** `docs/en/api.md` + `docs/cs/api.md`, approved by the owner.
-- [ ] **M2 — XML parser:** tokenizer + tree builder (iterative, no recursion per nesting level),
+- [x] **M2 — XML parser:** tokenizer + tree builder (iterative, no recursion per nesting level),
       line/column in error diagnostics, well-formedness tests (incl. invalid inputs from
       UseData.Xml tests).
 - [ ] **M3 — Element API:** lookups, usage tracking (each attribute / child name / text may be used
