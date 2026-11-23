@@ -18,6 +18,7 @@ test {
     _ = @import("parser.zig");
     _ = @import("parser_test.zig");
     _ = @import("elem_test.zig");
+    _ = @import("unused_test.zig");
     _ = @import("Timestamp.zig");
     _ = @import("parse.zig");
 }

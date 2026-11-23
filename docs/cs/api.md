@@ -207,10 +207,16 @@ vrátí jednu položku:
 ```zig
 pub const Unused = struct {
     elem: *const Elem,                    // where (use elem.path() for a printable path)
-    attrs: UnusedAttrIterator,            // unused attributes (name + value)
+    attrs: UnusedAttrIterator,            // unused attributes: next() ?UnusedAttr{ .name, .value }
     children: UnusedChildNameIterator,    // names of child groups that were never requested
     text: ?[]const u8,                    // unused text, or null
+
+    /// Prints e.g. `/company/address[0]: attributes: zip="1"; child elements: city; text: "x"`.
+    pub fn format(u: Unused, w: *std.Io.Writer) std.Io.Writer.Error!void;
 };
+
+var it = doc.unused();
+while (it.next()) |u| std.log.warn("unused: {f}", .{u});
 ```
 
 - Nepoužité podelementy se hlásí **jen jménem v rodiči**. Jejich obsah se nezkoumá, protože se na
@@ -220,6 +226,8 @@ pub const Unused = struct {
 - Atributy `xmlns` / `xmlns:*` se nikdy nehlásí.
 - `doc.expectAllUsed()` je zkratka, která selže s `error.UnusedData` u první položky a popíše ji
   v `Diagnostics`.
+- Žádná z obou funkcí nealokuje ani nic nemění, takže je lze volat opakovaně; výsledek vždy
+  odpovídá aktuálnímu stavu.
 
 Příklad (z testů UseData.Xml):
 

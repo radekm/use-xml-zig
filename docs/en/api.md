@@ -208,10 +208,16 @@ something unused:
 ```zig
 pub const Unused = struct {
     elem: *const Elem,                    // where (use elem.path() for a printable path)
-    attrs: UnusedAttrIterator,            // unused attributes (name + value)
+    attrs: UnusedAttrIterator,            // unused attributes: next() ?UnusedAttr{ .name, .value }
     children: UnusedChildNameIterator,    // names of child groups that were never requested
     text: ?[]const u8,                    // unused text, or null
+
+    /// Prints e.g. `/company/address[0]: attributes: zip="1"; child elements: city; text: "x"`.
+    pub fn format(u: Unused, w: *std.Io.Writer) std.Io.Writer.Error!void;
 };
+
+var it = doc.unused();
+while (it.next()) |u| std.log.warn("unused: {f}", .{u});
 ```
 
 - Unused child elements are reported **only by name in their parent**. Their content is not
@@ -221,6 +227,8 @@ pub const Unused = struct {
 - `xmlns` / `xmlns:*` attributes are never reported.
 - `doc.expectAllUsed()` is a shortcut that fails with `error.UnusedData` on the first entry and
   describes it in `Diagnostics`.
+- Neither function allocates nor changes anything, so they can be called repeatedly; the result
+  always reflects the current state.
 
 Example (from the UseData.Xml tests):
 

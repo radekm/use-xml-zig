@@ -66,7 +66,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 - [x] **M3 — API elementu:** vyhledávání, sledování použití (každý atribut / jméno podelementu / text
       lze použít jednou), chyby `WrongCount` / `AlreadyUsed`, cesta k elementu v `Diagnostics`.
 - [x] **M4 — Parsery hodnot:** řetězce, celá čísla, floaty, bool, enumy, hook `parseXml`, `Timestamp`.
-- [ ] **M5 — Hlášení nepoužitých dat:** `Document.unused()`, `Document.expectAllUsed()`, `ignoreAll`.
+- [x] **M5 — Hlášení nepoužitých dat:** `Document.unused()`, `Document.expectAllUsed()`, `ignoreAll`.
 - [ ] **M6 — Port testů a příklad:** portovat všechny testy UseData.Xml, přidat příklad se zprávou M7
       jako test a jednoduchý benchmark (`zig build bench`).
 - [x] **CI:** GitHub Actions (`mlugg/setup-zig`, Zig 0.17.1) spouští `zig fmt --check` a testy

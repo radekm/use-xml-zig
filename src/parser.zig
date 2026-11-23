@@ -28,7 +28,9 @@ pub fn parse(ctx: *Document.Context, max_depth: u32) Error!*Elem {
         .max_depth = max_depth,
     };
     defer p.deinit();
-    return p.parseDocument();
+    const root = try p.parseDocument();
+    ctx.elems = try p.arena.dupe(*Elem, p.all.items);
+    return root;
 }
 
 const RawAttr = struct {
@@ -118,8 +120,11 @@ const Parser = struct {
     stack: std.ArrayList(Frame) = .empty,
     attrs: std.ArrayList(RawAttr) = .empty,
     scratch: std.ArrayList(u8) = .empty,
+    /// All elements in document order.
+    all: std.ArrayList(*Elem) = .empty,
 
     fn deinit(p: *Parser) void {
+        p.all.deinit(p.gpa);
         for (p.stack.items) |*f| f.deinit(p.gpa);
         p.stack.deinit(p.gpa);
         p.attrs.deinit(p.gpa);
@@ -406,6 +411,7 @@ const Parser = struct {
             return p.fail(tag_start, "maximum nesting depth exceeded");
         }
         const elem = try p.arena.create(Elem);
+        try p.all.append(p.gpa, elem);
         var parent: ?*Elem = null;
         var same_name_index: u32 = 0;
         if (p.stack.items.len > 0) {
