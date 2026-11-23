@@ -3,6 +3,7 @@
 Anglická verze: [../en/api.md](../en/api.md).
 
 > Stav: **koncept**, čeká na schválení vlastníkem. Názvy a signatury se ještě mohou změnit.
+> Formáty hodnot a otázky zodpovězené 2026-11-23 jsou rozhodnuté.
 
 ## Myšlenka
 
@@ -158,6 +159,9 @@ Text je spojení všech textových a CDATA sekcí přímo uvnitř elementu. Kome
 instructions mezi nimi se zahodí. Bílé znaky zůstávají tak, jak jsou (žádné ořezávání). Prázdný
 element (`<a/>`, `<a></a>`) má text `""`.
 
+Volání `text*` na elementu, který má podelementy, selže s `error.WrongCount`.
+(UseData.Xml tam vrací `""`; ptát se na tom místě na text je téměř jistě chyba v kódu.)
+
 #### Ignorování
 
 ```zig
@@ -173,7 +177,7 @@ pub const Error = error{
     WrongCount,   // missing attribute/child, or too many children
     AlreadyUsed,  // the same attribute / child name / text was requested twice
     InvalidValue, // a built-in value parser rejected the string
-    OutOfMemory,  // only from ...Alloc variants
+    OutOfMemory,  // only from ...Alloc variants (see "Out of memory")
 };
 ```
 
@@ -184,7 +188,7 @@ Vlastní parsery smí vracet libovolnou chybu. Projde beze změny a zaznamená s
 
 1. Každé **jméno atributu**, každé **jméno podelementu** i **text** elementu lze vyžádat
    **nejvýše jednou**. Druhé vyžádání selže s `error.AlreadyUsed`. Platí to i pro jména, která
-   neexistují (`attrOpt("x")` dvakrát je chyba). Brání to dvojímu zpracování a odpovídá to UseData.Xml.
+   neexistují (`attrOpt("x")` dvakrát je chyba; viz otevřená otázka 1). Brání to dvojímu zpracování a odpovídá to UseData.Xml.
 2. `child`, `childOpt` a `children` označí za použitou **celou skupinu** podelementů s tím jménem.
    Každý vrácený element je pak *navštívený*: jeho vlastní obsah kontroluje hlášení nepoužitých dat.
 3. Ptát se na jméno, které neexistuje, je v pořádku (`attrOpt`, `childOpt`, `children` vrátí
@@ -237,9 +241,9 @@ Vestavěné typy:
 | `T`                       | Přijímaný vstup |
 |---------------------------|-----------------|
 | `[]const u8`              | libovolný řetězec (vypůjčený; `...Alloc` kopíruje) |
-| celá čísla se znaménkem i bez | desítkové číslice s volitelným znaménkem (`-`; `+` viz otevřené otázky); musí se vejít do `T` |
-| `f32`, `f64`              | desetinné číslo, volitelná desetinná část a exponent (`1`, `-0.5`, `1.5e3`) |
-| `bool`                    | `true`, `false` |
+| celá čísla se znaménkem i bez | volitelné znaménko `+` / `-`, pak jedna nebo více desítkových číslic; úvodní nuly jsou povoleny (`007`, `+5`, `-12`); žádné `_`, žádné bílé znaky; musí se vejít do `T` |
+| `f32`, `f64`              | volitelné znaménko, číslice, volitelně `.` následovaná číslicemi (`1`, `-0.5`, `+007.25`); žádný exponent, žádné `inf` / `nan`, žádný šestnáctkový tvar, žádné `.5` ani `5.` |
+| `bool`                    | přesně `true` nebo `false` (záleží na velikosti písmen) |
 | `enum`                    | přesně jméno jednoho z tagů (`@tagName`) |
 | `xml.Timestamp`           | viz níže |
 | `?T`                      | není povoleno. Použij varianty `Opt`. |
@@ -296,15 +300,33 @@ pub const Diagnostics = struct {
 Pole se slicy ukazují do vstupu nebo do dokumentu, takže platí do `doc.deinit()`. Když selže
 `Document.parse`, nastaví se jen `kind`, `message`, `line` a `column`.
 
+## Nedostatek paměti
+
+- `Document.parse`: při `error.OutOfMemory` se uvolní vše, co se do té doby alokovalo, a žádný
+  dokument se nevrátí. `Diagnostics` se nevyplní (samotná chyba říká dost).
+- Funkce bez alokátoru (`attr`, `attrOpt`, `attrWith`, `child`, `children`, `text`, `textWith`,
+  `ignoreAll`, `unused`, `expectAllUsed`, `Diagnostics.format`) **nikdy nealokují**. Vše, co
+  potřebují, se připraví během parsování, takže jim paměť dojít nemůže.
+- Funkce `...Alloc` vrátí `error.OutOfMemory`, když selže alokátor volajícího. Nic neunikne: paměť
+  alokovaná pro neúspěšnou hodnotu se před návratem uvolní. Hodnoty vrácené dřívějšími voláními
+  patří volajícímu, který je uvolní jako obvykle (`errdefer`).
+- Hodnota se označí jako použitá ještě před parsováním. I když parsování selže (nevalidní hodnota,
+  nedostatek paměti), druhé vyžádání stejného jména selže s `error.AlreadyUsed`.
+
+## Zodpovězené otázky (2026-11-23)
+
+1. Celá čísla: `+` i úvodní nuly jsou povoleny.
+2. Floaty: jen běžný desetinný zápis bez exponentu.
+3. `bool`: jen `true` / `false`, záleží na velikosti písmen.
+4. `Timestamp`: jen přípona `Z`, žádné offsety.
+5. `text*` na elementu s podelementy selže s `error.WrongCount`.
+6. Samostatné funkce pro varianty (žádná struktura s volbami).
+
 ## Otevřené otázky
 
-1. **Celá čísla:** přijímat úvodní `+`? Úvodní nuly (`007`)? (`std.fmt.parseInt` v Zigu přijímá
-   i `_` mezi číslicemi. To nechceme; použijeme vlastní striktní parser.)
-2. **Floaty:** povolit `inf` / `nan` / šestnáctkové floaty? Návrh: ne, jen desetinný tvar výše.
-3. **`bool`:** jen `true` / `false`, nebo i `1` / `0` (XML Schema)? Rozlišovat velikost písmen?
-4. **`Timestamp`:** jen přípona `Z`, nebo i offsety (`+01:00`), které se převedou na UTC?
-5. **`text()` na elementu s podelementy:** vrátit `""` (jako UseData.Xml), nebo chybu? Návrh: chybu
-   (`error.WrongCount`), protože ptát se tam na text je téměř jistě chyba v kódu.
-6. **Počet variant:** 4 varianty × (`attr`, `attrOpt`, `text`) dávají 12 funkcí. Alternativou je
-   struktura s volbami (`e.attr(T, "x", .{ .gpa = gpa })`). Návrh: nechat samostatné funkce; jsou
-   explicitní a dobře se hledají.
+1. **Dvojí vyžádání neexistujícího jména:** pravidlo 1 v „Pravidlech použití“ vyžaduje pamatovat si
+   jména, na která se někdo ptal, ale neexistují (aby `attrOpt("x")` dvakrát selhalo). Tato jména
+   nejsou při parsování známá, takže pamatovat si je by vyžadovalo alokaci v `attrOpt` / `childOpt` /
+   `children`. To je v rozporu s pravidlem „funkce bez alokátoru nikdy nealokují“.
+   Návrh: u neexistujících jmen si nic nepamatovat. Druhé vyžádání pak prostě znovu vrátí `null` /
+   prázdný slice. Nemůže to způsobit dvojí zpracování dat, protože žádná data nejsou.

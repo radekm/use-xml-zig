@@ -50,6 +50,9 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 | 2026-11-23 | Žádný `decimal`; čísla s desetinnou částí se parsují do floatů. Součástí knihovny je typ `Timestamp` (UTC). |
 | 2026-11-23 | Ve v1 žádné comptime mapování na struktury. |
 | 2026-11-23 | Paměť: arena dokumentu nikdy neopustí knihovnu. Hodnoty bez alokátoru jsou vypůjčené (platí, dokud žije dokument a vstup). Varianty `...Alloc` kopírují / alokují alokátorem volajícího; vlastní parsery, které alokují, dostanou alokátor volajícího. |
+| 2026-11-23 | Celá čísla: volitelné `+` / `-`, úvodní nuly povoleny. Floaty: jen běžný desetinný zápis (bez exponentu, `inf`, `nan`). `bool`: `true` / `false`, záleží na velikosti písmen. `Timestamp`: jen přípona `Z`. |
+| 2026-11-23 | `text*` na elementu s podelementy selže s `error.WrongCount`. |
+| 2026-11-23 | Varianty jsou samostatné funkce (`attr`, `attrWith`, `attrAlloc`, …), ne struktura s volbami. |
 | 2026-11-23 | Používá se pouze větev `master`. |
 
 ## Milníky
@@ -70,9 +73,5 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 
 ## Otevřené otázky
 
-Vyřešit během M1 (viz „Otevřené otázky“ v dokumentu API):
-
-1. Přesné přijímané formáty celých čísel / floatů (úvodní `+`? `inf`/`nan`? exponent?).
-2. Přijímané hodnoty `bool` (jen `true`/`false`, nebo i `1`/`0` jako v XML Schema?).
-3. Formáty `Timestamp` (jen `Z`, nebo i offsety jako `+01:00`; počet desetinných míst).
-4. Co vrátí `text()` na elementu, který má podelementy (prázdný řetězec jako UseData.Xml, nebo chybu).
+Viz „Otevřené otázky“ v [docs/cs/api.md](docs/cs/api.md). Aktuálně: zda má dvojí vyžádání neexistujícího
+jména selhat (vyžadovalo by to alokaci ve funkcích bez alokátoru).

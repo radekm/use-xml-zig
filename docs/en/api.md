@@ -3,6 +3,7 @@
 Czech version: [../cs/api.md](../cs/api.md).
 
 > Status: **draft**, waiting for the owner's approval. Names and signatures may still change.
+> The value formats and the questions answered on 2026-11-23 are settled.
 
 ## Idea
 
@@ -158,6 +159,9 @@ Text is the concatenation of all text and CDATA sections directly inside the ele
 and processing instructions between them are dropped. Whitespace is kept as it is (no trimming).
 An empty element (`<a/>`, `<a></a>`) has the text `""`.
 
+Calling `text*` on an element that has child elements fails with `error.WrongCount`.
+(UseData.Xml returns `""` there; asking for text in that place is almost certainly a bug.)
+
 #### Ignoring
 
 ```zig
@@ -173,7 +177,7 @@ pub const Error = error{
     WrongCount,   // missing attribute/child, or too many children
     AlreadyUsed,  // the same attribute / child name / text was requested twice
     InvalidValue, // a built-in value parser rejected the string
-    OutOfMemory,  // only from ...Alloc variants
+    OutOfMemory,  // only from ...Alloc variants (see "Out of memory")
 };
 ```
 
@@ -184,7 +188,7 @@ Custom parsers may return any error. It is passed through unchanged and is recor
 
 1. Each **attribute name**, each **child name** and the **text** of an element can be requested
    **at most once**. A second request fails with `error.AlreadyUsed`. This also holds for names
-   that don't exist (`attrOpt("x")` twice is an error). This prevents double processing and
+   that don't exist (`attrOpt("x")` twice is an error; see open question 1). This prevents double processing and
    matches UseData.Xml.
 2. `child`, `childOpt` and `children` mark the **whole group** of children with that name as used.
    Each returned element is then *visited*: its own content is checked by the unused report.
@@ -238,9 +242,9 @@ Built-in types:
 | `T`                     | Accepted input |
 |-------------------------|----------------|
 | `[]const u8`            | any string (borrowed; `...Alloc` copies) |
-| signed / unsigned ints  | decimal digits with an optional sign (`-`; `+` see open questions); must fit into `T` |
-| `f32`, `f64`            | decimal number, optional fraction and exponent (`1`, `-0.5`, `1.5e3`) |
-| `bool`                  | `true`, `false` |
+| signed / unsigned ints  | optional sign `+` / `-`, then one or more decimal digits; leading zeros are allowed (`007`, `+5`, `-12`); no `_`, no whitespace; must fit into `T` |
+| `f32`, `f64`            | optional sign, digits, optionally `.` followed by digits (`1`, `-0.5`, `+007.25`); no exponent, no `inf` / `nan`, no hexadecimal form, no `.5` or `5.` |
+| `bool`                  | exactly `true` or `false` (case-sensitive) |
 | `enum`                  | exactly the name of one of the tags (`@tagName`) |
 | `xml.Timestamp`         | see below |
 | `?T`                    | not allowed. Use the `Opt` variants instead. |
@@ -297,16 +301,34 @@ pub const Diagnostics = struct {
 Fields with slices point into the input or into the document, so they are valid until
 `doc.deinit()`. When `Document.parse` fails, only `kind`, `message`, `line` and `column` are set.
 
+## Out of memory
+
+- `Document.parse`: on `error.OutOfMemory` everything allocated so far is freed and no document is
+  returned. `Diagnostics` is not filled in (the error itself says enough).
+- Functions without an allocator (`attr`, `attrOpt`, `attrWith`, `child`, `children`, `text`,
+  `textWith`, `ignoreAll`, `unused`, `expectAllUsed`, `Diagnostics.format`) **never allocate**.
+  Everything they need is prepared during parsing, so they can't run out of memory.
+- `...Alloc` functions return `error.OutOfMemory` when the caller's allocator fails. Nothing is
+  leaked: memory allocated for the failed value is freed before returning. Values returned by
+  earlier calls belong to the caller, who frees them as usual (`errdefer`).
+- The value is marked as used before parsing. So even when parsing fails (invalid value, out of
+  memory) a second request for the same name fails with `error.AlreadyUsed`.
+
+## Resolved questions (2026-11-23)
+
+1. Integers: `+` and leading zeros are allowed.
+2. Floats: only the plain decimal form without exponent.
+3. `bool`: only `true` / `false`, case-sensitive.
+4. `Timestamp`: only the `Z` suffix, no offsets.
+5. `text*` on an element with child elements fails with `error.WrongCount`.
+6. Separate functions for the variants (no options struct).
+
 ## Open questions
 
-1. **Integers:** accept a leading `+`? Leading zeros (`007`)? (Zig's `std.fmt.parseInt` also
-   accepts `_` between digits. We don't want that; we will use our own strict parser.)
-2. **Floats:** allow `inf` / `nan` / hexadecimal floats? Proposal: no, only the decimal form above.
-3. **`bool`:** only `true` / `false`, or also `1` / `0` (XML Schema)? Case-sensitive?
-4. **`Timestamp`:** only the `Z` suffix, or also offsets (`+01:00`) that are converted to UTC?
-5. **`text()` on an element with child elements:** return `""` (like UseData.Xml) or fail with
-   an error? Proposal: an error (`error.WrongCount`), because asking for text there is almost
-   certainly a bug.
-6. **Number of variants:** 4 variants × (`attr`, `attrOpt`, `text`) give 12 functions. An
-   alternative is an options struct (`e.attr(T, "x", .{ .gpa = gpa })`). Proposal: keep the
-   separate functions; they are explicit and greppable.
+1. **Requesting a missing name twice:** rule 1 under "Usage rules" requires remembering names
+   that were requested but don't exist (so that `attrOpt("x")` twice fails). Those names are not
+   known at parse time, so remembering them would need an allocation in `attrOpt` / `childOpt` /
+   `children`, which conflicts with "functions without an allocator never allocate".
+   Proposal: for missing names don't remember anything. A second request then simply returns
+   `null` / an empty slice again. This can't cause any data to be processed twice, because there
+   is no data.

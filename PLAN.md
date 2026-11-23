@@ -50,6 +50,9 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 | 2026-11-23 | No `decimal`; numbers with a fraction are parsed into floats. A UTC `Timestamp` type is part of the library. |
 | 2026-11-23 | No comptime struct mapping in v1. |
 | 2026-11-23 | Memory: the document's arena never leaves the library. Values without an allocator are borrowed (valid while the document and the input live). `...Alloc` variants copy / allocate with the caller's allocator; custom parsers that allocate get the caller's allocator. |
+| 2026-11-23 | Integers: optional `+` / `-`, leading zeros allowed. Floats: plain decimal form only (no exponent, `inf`, `nan`). `bool`: `true` / `false`, case-sensitive. `Timestamp`: `Z` suffix only. |
+| 2026-11-23 | `text*` on an element with child elements fails with `error.WrongCount`. |
+| 2026-11-23 | Variants are separate functions (`attr`, `attrWith`, `attrAlloc`, …), not an options struct. |
 | 2026-11-23 | Only the `master` branch is used. |
 
 ## Milestones
@@ -70,10 +73,5 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 
 ## Open questions
 
-To be resolved during M1 (see "Open questions" in the API document):
-
-1. Exact accepted formats of integers / floats (leading `+`? `inf`/`nan`? exponent?).
-2. Accepted `bool` values (`true`/`false` only, or also `1`/`0` as in XML Schema?).
-3. `Timestamp` formats (only `Z`, or also offsets like `+01:00`; number of fractional digits).
-4. What `text()` returns on an element that has child elements (empty string like UseData.Xml,
-   or an error).
+See "Open questions" in [docs/en/api.md](docs/en/api.md). Currently: whether a missing name requested
+twice must fail (it would require an allocation in functions without an allocator).
