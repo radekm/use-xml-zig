@@ -69,8 +69,9 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 - [ ] **M5 — Unused reporting:** `Document.unused()`, `Document.expectAllUsed()`, `ignoreAll`.
 - [ ] **M6 — Port tests & example:** port all tests of UseData.Xml, add the M7 message example
       as a test and a simple benchmark (`zig build bench`).
-- [ ] **M7 — Polish:** documentation in `docs/en` + `docs/cs`, doc comments, CI (GitHub Actions
-      with Zig 0.17.1).
+- [x] **CI:** GitHub Actions (`mlugg/setup-zig`, Zig 0.17.1) runs `zig fmt --check` and the tests
+      (Debug + ReleaseSafe) on Linux, macOS and Windows.
+- [ ] **M7 — Polish:** documentation in `docs/en` + `docs/cs`, doc comments.
 
 ## Open questions
 

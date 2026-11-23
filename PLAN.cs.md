@@ -69,8 +69,9 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 - [ ] **M5 — Hlášení nepoužitých dat:** `Document.unused()`, `Document.expectAllUsed()`, `ignoreAll`.
 - [ ] **M6 — Port testů a příklad:** portovat všechny testy UseData.Xml, přidat příklad se zprávou M7
       jako test a jednoduchý benchmark (`zig build bench`).
-- [ ] **M7 — Dokončení:** dokumentace v `docs/en` + `docs/cs`, doc komentáře, CI (GitHub Actions
-      se Zigem 0.17.1).
+- [x] **CI:** GitHub Actions (`mlugg/setup-zig`, Zig 0.17.1) spouští `zig fmt --check` a testy
+      (Debug + ReleaseSafe) na Linuxu, macOS a Windows.
+- [ ] **M7 — Dokončení:** dokumentace v `docs/en` + `docs/cs`, doc komentáře.
 
 ## Otevřené otázky
 
