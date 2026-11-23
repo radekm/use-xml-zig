@@ -319,6 +319,23 @@ pub const Diagnostics = struct {
 Fields with slices point into the input or into the document, so they are valid until
 `doc.deinit()`. When `Document.parse` fails, only `kind`, `message`, `line` and `column` are set.
 
+**Print (or otherwise process) `Diagnostics` before calling `doc.deinit()`.** After that,
+`elem`, `selector` and `input` point to freed memory. The code that parses the document is
+responsible for reporting the error. Typical pattern:
+
+```zig
+var diag: xml.Diagnostics = .{};
+var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &diag }) catch |err| {
+    std.log.err("{s}: {f}", .{ @errorName(err), diag }); // only static data, fine
+    return err;
+};
+defer doc.deinit();
+// `errdefer` declared after `defer doc.deinit()` runs before it.
+errdefer std.log.err("{f}", .{diag});
+```
+
+The example `examples/m7/m7.zig` shows the same with a writer passed in by the caller.
+
 ## Out of memory
 
 - `Document.parse`: on `error.OutOfMemory` everything allocated so far is freed and no document is

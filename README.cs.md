@@ -30,7 +30,10 @@ try doc.expectAllUsed(); // fails if the input contains anything we didn't read
 ## Vývoj
 
 ```sh
-zig build test
+zig build test    # testy (knihovna + příklady)
+zig build bench   # benchmark (vždy ReleaseFast)
 ```
+
+Příklad skutečného použití: [examples/m7/m7.zig](examples/m7/m7.zig).
 
 Pravidla pro přispěvatele (i AI agenty) jsou v [AGENTS.cs.md](AGENTS.cs.md).

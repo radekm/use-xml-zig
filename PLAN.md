@@ -54,6 +54,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 | 2026-11-23 | `text*` on an element with child elements fails with `error.WrongCount`. |
 | 2026-11-23 | Variants are separate functions (`attr`, `attrWith`, `attrAlloc`, …), not an options struct. |
 | 2026-11-23 | Requested names that don't exist are remembered (a second request fails with `AlreadyUsed`); lookups by name may therefore return `OutOfMemory`. |
+| 2026-11-23 | `Diagnostics` keeps pointing into the document; whoever parses must report errors before `doc.deinit()` (no copying into own buffers). |
 | 2026-11-23 | Only the `master` branch is used. |
 
 ## Milestones
@@ -67,7 +68,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
       once), `WrongCount` / `AlreadyUsed` errors, element path in `Diagnostics`.
 - [x] **M4 — Value parsers:** strings, ints, floats, bool, enums, `parseXml` hook, `Timestamp`.
 - [x] **M5 — Unused reporting:** `Document.unused()`, `Document.expectAllUsed()`, `ignoreAll`.
-- [ ] **M6 — Port tests & example:** port all tests of UseData.Xml, add the M7 message example
+- [x] **M6 — Port tests & example:** port all tests of UseData.Xml, add the M7 message example
       as a test and a simple benchmark (`zig build bench`).
 - [x] **CI:** GitHub Actions (`mlugg/setup-zig`, Zig 0.17.1) runs `zig fmt --check` and the tests
       (Debug + ReleaseSafe) on Linux, macOS and Windows.

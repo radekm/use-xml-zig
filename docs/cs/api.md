@@ -317,6 +317,23 @@ pub const Diagnostics = struct {
 Pole se slicy ukazují do vstupu nebo do dokumentu, takže platí do `doc.deinit()`. Když selže
 `Document.parse`, nastaví se jen `kind`, `message`, `line` a `column`.
 
+**`Diagnostics` vypiš (nebo jinak zpracuj) dřív, než zavoláš `doc.deinit()`.** Potom už `elem`,
+`selector` a `input` ukazují do uvolněné paměti. Za nahlášení chyby odpovídá kód, který dokument
+parsuje. Typický vzor:
+
+```zig
+var diag: xml.Diagnostics = .{};
+var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &diag }) catch |err| {
+    std.log.err("{s}: {f}", .{ @errorName(err), diag }); // only static data, fine
+    return err;
+};
+defer doc.deinit();
+// `errdefer` declared after `defer doc.deinit()` runs before it.
+errdefer std.log.err("{f}", .{diag});
+```
+
+Příklad `examples/m7/m7.zig` ukazuje totéž s writerem, který předá volající.
+
 ## Nedostatek paměti
 
 - `Document.parse`: při `error.OutOfMemory` se uvolní vše, co se do té doby alokovalo, a žádný

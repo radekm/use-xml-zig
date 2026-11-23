@@ -30,7 +30,10 @@ try doc.expectAllUsed(); // fails if the input contains anything we didn't read
 ## Development
 
 ```sh
-zig build test
+zig build test    # tests (library + examples)
+zig build bench   # benchmark (always ReleaseFast)
 ```
+
+Example of real use: [examples/m7/m7.zig](examples/m7/m7.zig).
 
 Rules for contributors (and AI agents) are in [AGENTS.md](AGENTS.md).

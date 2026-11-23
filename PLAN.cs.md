@@ -54,6 +54,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 | 2026-11-23 | `text*` na elementu s podelementy selže s `error.WrongCount`. |
 | 2026-11-23 | Varianty jsou samostatné funkce (`attr`, `attrWith`, `attrAlloc`, …), ne struktura s volbami. |
 | 2026-11-23 | Vyžádaná jména, která neexistují, se pamatují (druhé vyžádání selže s `AlreadyUsed`); vyhledávání podle jména proto může vrátit `OutOfMemory`. |
+| 2026-11-23 | `Diagnostics` dál ukazuje do dokumentu; kdo parsuje, musí chyby nahlásit před `doc.deinit()` (žádné kopírování do vlastních bufferů). |
 | 2026-11-23 | Používá se pouze větev `master`. |
 
 ## Milníky
@@ -67,7 +68,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
       lze použít jednou), chyby `WrongCount` / `AlreadyUsed`, cesta k elementu v `Diagnostics`.
 - [x] **M4 — Parsery hodnot:** řetězce, celá čísla, floaty, bool, enumy, hook `parseXml`, `Timestamp`.
 - [x] **M5 — Hlášení nepoužitých dat:** `Document.unused()`, `Document.expectAllUsed()`, `ignoreAll`.
-- [ ] **M6 — Port testů a příklad:** portovat všechny testy UseData.Xml, přidat příklad se zprávou M7
+- [x] **M6 — Port testů a příklad:** portovat všechny testy UseData.Xml, přidat příklad se zprávou M7
       jako test a jednoduchý benchmark (`zig build bench`).
 - [x] **CI:** GitHub Actions (`mlugg/setup-zig`, Zig 0.17.1) spouští `zig fmt --check` a testy
       (Debug + ReleaseSafe) na Linuxu, macOS a Windows.
