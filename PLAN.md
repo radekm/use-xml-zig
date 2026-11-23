@@ -55,6 +55,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 | 2026-11-23 | Variants are separate functions (`attr`, `attrWith`, `attrAlloc`, …), not an options struct. |
 | 2026-11-23 | Requested names that don't exist are remembered (a second request fails with `AlreadyUsed`); lookups by name may therefore return `OutOfMemory`. |
 | 2026-11-23 | Extraction errors are recorded by the document (`doc.diagnostics()`), so it is obvious they are invalid after `doc.deinit()`; whoever parses reports them before that. XML syntax errors go to a separate `ParseDiagnostics` (no pointers) passed in `Options`. |
+| 2026-11-23 | License: zlib. |
 | 2026-11-23 | Only the `master` branch is used. |
 
 ## Milestones

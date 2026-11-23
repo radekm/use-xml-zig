@@ -48,3 +48,7 @@ zig build docs    # HTML documentation
 ```
 
 Rules for contributors (and AI agents) are in [AGENTS.md](AGENTS.md), the plan in [PLAN.md](PLAN.md).
+
+## License
+
+[zlib](LICENSE)

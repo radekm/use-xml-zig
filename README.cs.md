@@ -48,3 +48,7 @@ zig build docs    # HTML dokumentace
 ```
 
 Pravidla pro přispěvatele (i AI agenty) jsou v [AGENTS.cs.md](AGENTS.cs.md), plán v [PLAN.cs.md](PLAN.cs.md).
+
+## Licence
+
+[zlib](LICENSE)
