@@ -72,7 +72,8 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
       jako test a jednoduchý benchmark (`zig build bench`).
 - [x] **CI:** GitHub Actions (`mlugg/setup-zig`, Zig 0.17.1) spouští `zig fmt --check` a testy
       (Debug + ReleaseSafe) na Linuxu, macOS a Windows.
-- [ ] **M7 — Dokončení:** dokumentace v `docs/en` + `docs/cs`, doc komentáře.
+- [x] **M7 — Dokončení:** průvodce v `docs/en` + `docs/cs` (kód otestovaný v `examples/guide`), doc
+      komentáře, `zig build docs`.
 
 ## Otevřené otázky
 

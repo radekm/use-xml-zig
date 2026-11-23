@@ -72,7 +72,8 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
       as a test and a simple benchmark (`zig build bench`).
 - [x] **CI:** GitHub Actions (`mlugg/setup-zig`, Zig 0.17.1) runs `zig fmt --check` and the tests
       (Debug + ReleaseSafe) on Linux, macOS and Windows.
-- [ ] **M7 — Polish:** documentation in `docs/en` + `docs/cs`, doc comments.
+- [x] **M7 — Polish:** guide in `docs/en` + `docs/cs` (code tested in `examples/guide`), doc comments,
+      `zig build docs`.
 
 ## Open questions
 

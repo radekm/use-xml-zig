@@ -42,6 +42,7 @@ pub fn isNameChar(cp: u21) bool {
     };
 }
 
+/// Position and description of an invalid character, see `findInvalid`.
 pub const Invalid = struct {
     offset: usize,
     message: []const u8,

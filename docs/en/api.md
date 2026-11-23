@@ -2,6 +2,8 @@
 
 Czech version: [../cs/api.md](../cs/api.md).
 
+This is the API reference with design decisions. For an introduction, read the [guide](guide.md).
+
 > Status: **approved** (2026-11-23). Changes must be approved by the owner.
 
 ## Idea

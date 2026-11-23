@@ -15,6 +15,16 @@ pub fn build(b: *std.Build) void {
     const mod_tests = b.addTest(.{ .root_module = mod });
     test_step.dependOn(&b.addRunArtifact(mod_tests).step);
 
+    // HTML documentation generated from doc comments.
+    const docs_lib = b.addLibrary(.{ .name = "use_xml", .root_module = mod });
+    const install_docs = b.addInstallDirectory(.{
+        .source_dir = docs_lib.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+    const docs_step = b.step("docs", "Generate HTML documentation into zig-out/docs");
+    docs_step.dependOn(&install_docs.step);
+
     // Example: M7 message (tested together with the library).
     const m7 = b.createModule(.{
         .root_source_file = b.path("examples/m7/m7.zig"),
@@ -24,6 +34,15 @@ pub fn build(b: *std.Build) void {
     });
     const m7_tests = b.addTest(.{ .root_module = m7 });
     test_step.dependOn(&b.addRunArtifact(m7_tests).step);
+
+    // Code from the guide.
+    const guide = b.createModule(.{
+        .root_source_file = b.path("examples/guide/guide.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "use_xml", .module = mod }},
+    });
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = guide })).step);
 
     // Benchmark, always optimised for speed.
     const fast_mod = b.createModule(.{

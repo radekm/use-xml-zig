@@ -9,6 +9,7 @@ seconds: i64,
 /// 0 ..< 1_000_000_000
 nanos: u32,
 
+/// Error of `parse`.
 pub const ParseError = error{InvalidValue};
 
 /// Parses `YYYY-MM-DDTHH:MM:SS[.f…]Z` where `T` may also be a single space and the fraction
@@ -46,6 +47,7 @@ pub fn parse(s: []const u8) ParseError!Timestamp {
     };
 }
 
+/// Hook used by `attr(Timestamp, …)` / `text(Timestamp)`; same as `parse`.
 pub fn parseXml(s: []const u8) ParseError!Timestamp {
     return parse(s);
 }

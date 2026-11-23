@@ -2,6 +2,8 @@
 
 Anglická verze: [../en/api.md](../en/api.md).
 
+Toto je popis API s rozhodnutími o návrhu. Pro úvod si přečtěte [průvodce](guide.md).
+
 > Stav: **schváleno** (2026-11-23). Změny musí schválit vlastník.
 
 ## Myšlenka

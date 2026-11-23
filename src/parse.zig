@@ -4,6 +4,7 @@
 const std = @import("std");
 const Timestamp = @import("Timestamp.zig");
 
+/// The only error of the built-in parsers: the string is not a valid value.
 pub const Error = error{InvalidValue};
 
 /// Optional sign `+` / `-` followed by one or more decimal digits. Leading zeros are allowed.

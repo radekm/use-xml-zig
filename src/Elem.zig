@@ -33,6 +33,7 @@ visited: bool = false,
 /// Names that were requested but don't exist in this element.
 missing: ?*Missing = null,
 
+/// Errors of the extraction functions. Details are in `Document.Options.diagnostics`.
 pub const Error = error{
     /// Missing attribute/child, too many children, or text of an element with children.
     WrongCount,
@@ -43,6 +44,7 @@ pub const Error = error{
     OutOfMemory,
 };
 
+/// Internal: a requested name that doesn't exist in the element.
 pub const Missing = struct {
     kind: enum { attr, child },
     /// Copy owned by the document.
@@ -50,6 +52,7 @@ pub const Missing = struct {
     next: ?*Missing,
 };
 
+/// Internal: an attribute and its usage flag.
 pub const Attr = struct {
     local_name: []const u8,
     prefix: []const u8,
@@ -57,6 +60,7 @@ pub const Attr = struct {
     used: bool = false,
 };
 
+/// Internal: child elements with the same local name and their usage flag.
 pub const Group = struct {
     local_name: []const u8,
     prefix: []const u8,
@@ -69,6 +73,7 @@ pub fn name(e: *const Elem) []const u8 {
     return e.local_name;
 }
 
+/// Parent element, or null for the root.
 pub fn parent(e: *const Elem) ?*Elem {
     return e.parent_elem;
 }
@@ -83,6 +88,7 @@ pub fn path(e: *const Elem) Path {
     return .{ .elem = e };
 }
 
+/// Printable path of an element, returned by `path`.
 pub const Path = struct {
     elem: *const Elem,
 

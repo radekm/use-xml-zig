@@ -10,6 +10,7 @@ const Document = @This();
 
 ctx: *Context,
 
+/// Options for `parse`.
 pub const Options = struct {
     /// Filled in when `parse` or any extraction function fails.
     diagnostics: ?*Diagnostics = null,
@@ -17,6 +18,7 @@ pub const Options = struct {
     max_depth: u32 = 256,
 };
 
+/// Errors of `parse`. Details of `InvalidXml` are in `Options.diagnostics`.
 pub const ParseError = error{ InvalidXml, OutOfMemory };
 
 /// Internal state shared by the document and its elements.
@@ -52,6 +54,8 @@ pub fn parse(gpa: Allocator, input: []const u8, options: Options) ParseError!Doc
     return .{ .ctx = ctx };
 }
 
+/// Frees the document and all its elements. Borrowed values (strings returned without
+/// an allocator) and `Diagnostics` pointing into the document become invalid.
 pub fn deinit(doc: *Document) void {
     const gpa = doc.ctx.gpa;
     doc.ctx.arena.deinit();
@@ -96,6 +100,7 @@ pub fn expectAllUsed(doc: *Document) error{UnusedData}!void {
     return error.UnusedData;
 }
 
+/// Returned by `unused`. Call `next` until it returns null.
 pub const UnusedIterator = struct {
     elems: []const *Elem,
     index: usize = 0,
@@ -158,12 +163,14 @@ pub const Unused = struct {
     }
 };
 
+/// An attribute that was not used.
 pub const UnusedAttr = struct {
     /// Local name.
     name: []const u8,
     value: []const u8,
 };
 
+/// Iterates over unused attributes of one element.
 pub const UnusedAttrIterator = struct {
     attrs: []const Elem.Attr,
     index: usize = 0,
@@ -178,6 +185,7 @@ pub const UnusedAttrIterator = struct {
     }
 };
 
+/// Iterates over names of child groups of one element that were never requested.
 pub const UnusedChildNameIterator = struct {
     groups: []const Elem.Group,
     index: usize = 0,

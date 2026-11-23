@@ -24,8 +24,12 @@ line: u32 = 0,
 /// 1-based position in the input for XML syntax errors (counted in code points).
 column: u32 = 0,
 
+/// What went wrong. `none` means no error was recorded.
 pub const Kind = enum { none, invalid_xml, wrong_count, already_used, invalid_value, unused_data };
 
+/// Prints a one-line description, e.g. `/company/address[0]: "city": attribute is missing`
+/// or `invalid XML at line 2, column 4: end tag does not match start tag`.
+/// Must be called before `Document.deinit` (see the struct documentation).
 pub fn format(d: Diagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void {
     switch (d.kind) {
         .none => try w.writeAll("no error"),
