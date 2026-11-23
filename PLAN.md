@@ -53,6 +53,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 | 2026-11-23 | Integers: optional `+` / `-`, leading zeros allowed. Floats: plain decimal form only (no exponent, `inf`, `nan`). `bool`: `true` / `false`, case-sensitive. `Timestamp`: `Z` suffix only. |
 | 2026-11-23 | `text*` on an element with child elements fails with `error.WrongCount`. |
 | 2026-11-23 | Variants are separate functions (`attr`, `attrWith`, `attrAlloc`, …), not an options struct. |
+| 2026-11-23 | Requested names that don't exist are remembered (a second request fails with `AlreadyUsed`); lookups by name may therefore return `OutOfMemory`. |
 | 2026-11-23 | Only the `master` branch is used. |
 
 ## Milestones
@@ -73,5 +74,4 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 
 ## Open questions
 
-See "Open questions" in [docs/en/api.md](docs/en/api.md). Currently: whether a missing name requested
-twice must fail (it would require an allocation in functions without an allocator).
+None at the moment.

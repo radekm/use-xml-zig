@@ -177,7 +177,7 @@ pub const Error = error{
     WrongCount,   // missing attribute/child, or too many children
     AlreadyUsed,  // the same attribute / child name / text was requested twice
     InvalidValue, // a built-in value parser rejected the string
-    OutOfMemory,  // only from ...Alloc variants (see "Out of memory")
+    OutOfMemory,  // see "Out of memory"
 };
 ```
 
@@ -188,7 +188,8 @@ Custom parsers may return any error. It is passed through unchanged and is recor
 
 1. Each **attribute name**, each **child name** and the **text** of an element can be requested
    **at most once**. A second request fails with `error.AlreadyUsed`. This also holds for names
-   that don't exist (`attrOpt("x")` twice is an error; see open question 1). This prevents double processing and
+   that don't exist (`attrOpt("x")` twice is an error). Such names are
+   remembered in the document; this catches code that processes the same thing twice. This prevents double processing and
    matches UseData.Xml.
 2. `child`, `childOpt` and `children` mark the **whole group** of children with that name as used.
    Each returned element is then *visited*: its own content is checked by the unused report.
@@ -305,9 +306,11 @@ Fields with slices point into the input or into the document, so they are valid 
 
 - `Document.parse`: on `error.OutOfMemory` everything allocated so far is freed and no document is
   returned. `Diagnostics` is not filled in (the error itself says enough).
-- Functions without an allocator (`attr`, `attrOpt`, `attrWith`, `child`, `children`, `text`,
-  `textWith`, `ignoreAll`, `unused`, `expectAllUsed`, `Diagnostics.format`) **never allocate**.
-  Everything they need is prepared during parsing, so they can't run out of memory.
+- Lookups by name (`attr*`, `child*`, `children`) can return `error.OutOfMemory` **only when the
+  name doesn't exist in the element**: the name is then copied into the document's internal arena
+  so that a second request can be detected. Existing names need no allocation.
+- `text*` without an allocator, `ignoreAll`, `unused`, `expectAllUsed` and `Diagnostics.format`
+  never allocate.
 - `...Alloc` functions return `error.OutOfMemory` when the caller's allocator fails. Nothing is
   leaked: memory allocated for the failed value is freed before returning. Values returned by
   earlier calls belong to the caller, who frees them as usual (`errdefer`).
@@ -322,13 +325,9 @@ Fields with slices point into the input or into the document, so they are valid 
 4. `Timestamp`: only the `Z` suffix, no offsets.
 5. `text*` on an element with child elements fails with `error.WrongCount`.
 6. Separate functions for the variants (no options struct).
+7. Names that were requested but don't exist are remembered, and a second request fails with
+   `error.AlreadyUsed`. That is why lookups by name may return `error.OutOfMemory`.
 
 ## Open questions
 
-1. **Requesting a missing name twice:** rule 1 under "Usage rules" requires remembering names
-   that were requested but don't exist (so that `attrOpt("x")` twice fails). Those names are not
-   known at parse time, so remembering them would need an allocation in `attrOpt` / `childOpt` /
-   `children`, which conflicts with "functions without an allocator never allocate".
-   Proposal: for missing names don't remember anything. A second request then simply returns
-   `null` / an empty slice again. This can't cause any data to be processed twice, because there
-   is no data.
+None at the moment.

@@ -177,7 +177,7 @@ pub const Error = error{
     WrongCount,   // missing attribute/child, or too many children
     AlreadyUsed,  // the same attribute / child name / text was requested twice
     InvalidValue, // a built-in value parser rejected the string
-    OutOfMemory,  // only from ...Alloc variants (see "Out of memory")
+    OutOfMemory,  // see "Out of memory"
 };
 ```
 
@@ -188,7 +188,8 @@ Vlastní parsery smí vracet libovolnou chybu. Projde beze změny a zaznamená s
 
 1. Každé **jméno atributu**, každé **jméno podelementu** i **text** elementu lze vyžádat
    **nejvýše jednou**. Druhé vyžádání selže s `error.AlreadyUsed`. Platí to i pro jména, která
-   neexistují (`attrOpt("x")` dvakrát je chyba; viz otevřená otázka 1). Brání to dvojímu zpracování a odpovídá to UseData.Xml.
+   neexistují (`attrOpt("x")` dvakrát je chyba). Taková jména si
+   dokument pamatuje; odhalí se tak kód, který zpracovává stejnou věc dvakrát. Brání to dvojímu zpracování a odpovídá to UseData.Xml.
 2. `child`, `childOpt` a `children` označí za použitou **celou skupinu** podelementů s tím jménem.
    Každý vrácený element je pak *navštívený*: jeho vlastní obsah kontroluje hlášení nepoužitých dat.
 3. Ptát se na jméno, které neexistuje, je v pořádku (`attrOpt`, `childOpt`, `children` vrátí
@@ -304,9 +305,11 @@ Pole se slicy ukazují do vstupu nebo do dokumentu, takže platí do `doc.deinit
 
 - `Document.parse`: při `error.OutOfMemory` se uvolní vše, co se do té doby alokovalo, a žádný
   dokument se nevrátí. `Diagnostics` se nevyplní (samotná chyba říká dost).
-- Funkce bez alokátoru (`attr`, `attrOpt`, `attrWith`, `child`, `children`, `text`, `textWith`,
-  `ignoreAll`, `unused`, `expectAllUsed`, `Diagnostics.format`) **nikdy nealokují**. Vše, co
-  potřebují, se připraví během parsování, takže jim paměť dojít nemůže.
+- Vyhledávání podle jména (`attr*`, `child*`, `children`) může vrátit `error.OutOfMemory` **jen
+  tehdy, když jméno v elementu neexistuje**: jméno se pak zkopíruje do interní areny dokumentu,
+  aby šlo odhalit druhé vyžádání. Existující jména žádnou alokaci nepotřebují.
+- `text*` bez alokátoru, `ignoreAll`, `unused`, `expectAllUsed` a `Diagnostics.format` nikdy
+  nealokují.
 - Funkce `...Alloc` vrátí `error.OutOfMemory`, když selže alokátor volajícího. Nic neunikne: paměť
   alokovaná pro neúspěšnou hodnotu se před návratem uvolní. Hodnoty vrácené dřívějšími voláními
   patří volajícímu, který je uvolní jako obvykle (`errdefer`).
@@ -321,12 +324,9 @@ Pole se slicy ukazují do vstupu nebo do dokumentu, takže platí do `doc.deinit
 4. `Timestamp`: jen přípona `Z`, žádné offsety.
 5. `text*` na elementu s podelementy selže s `error.WrongCount`.
 6. Samostatné funkce pro varianty (žádná struktura s volbami).
+7. Jména, na která se někdo ptal, ale neexistují, si dokument pamatuje a druhé vyžádání selže
+   s `error.AlreadyUsed`. Proto vyhledávání podle jména smí vrátit `error.OutOfMemory`.
 
 ## Otevřené otázky
 
-1. **Dvojí vyžádání neexistujícího jména:** pravidlo 1 v „Pravidlech použití“ vyžaduje pamatovat si
-   jména, na která se někdo ptal, ale neexistují (aby `attrOpt("x")` dvakrát selhalo). Tato jména
-   nejsou při parsování známá, takže pamatovat si je by vyžadovalo alokaci v `attrOpt` / `childOpt` /
-   `children`. To je v rozporu s pravidlem „funkce bez alokátoru nikdy nealokují“.
-   Návrh: u neexistujících jmen si nic nepamatovat. Druhé vyžádání pak prostě znovu vrátí `null` /
-   prázdný slice. Nemůže to způsobit dvojí zpracování dat, protože žádná data nejsou.
+Momentálně žádné.

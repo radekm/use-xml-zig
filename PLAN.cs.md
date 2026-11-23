@@ -53,6 +53,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 | 2026-11-23 | Celá čísla: volitelné `+` / `-`, úvodní nuly povoleny. Floaty: jen běžný desetinný zápis (bez exponentu, `inf`, `nan`). `bool`: `true` / `false`, záleží na velikosti písmen. `Timestamp`: jen přípona `Z`. |
 | 2026-11-23 | `text*` na elementu s podelementy selže s `error.WrongCount`. |
 | 2026-11-23 | Varianty jsou samostatné funkce (`attr`, `attrWith`, `attrAlloc`, …), ne struktura s volbami. |
+| 2026-11-23 | Vyžádaná jména, která neexistují, se pamatují (druhé vyžádání selže s `AlreadyUsed`); vyhledávání podle jména proto může vrátit `OutOfMemory`. |
 | 2026-11-23 | Používá se pouze větev `master`. |
 
 ## Milníky
@@ -73,5 +74,4 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 
 ## Otevřené otázky
 
-Viz „Otevřené otázky“ v [docs/cs/api.md](docs/cs/api.md). Aktuálně: zda má dvojí vyžádání neexistujícího
-jména selhat (vyžadovalo by to alokaci ve funkcích bez alokátoru).
+Momentálně žádné.
