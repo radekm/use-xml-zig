@@ -3,7 +3,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const xml = @import("use_xml");
+const use_xml = @import("use_xml");
 const t = std.testing;
 
 // ------------------------------------------------------------------ Quick start
@@ -17,8 +17,8 @@ const Person = struct {
 /// Reads `<people><person name="…" age="…"><email>…</email></person>…</people>`.
 /// The result is allocated in `arena`.
 fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
-    var parse_diag: xml.ParseDiagnostics = .{};
-    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+    var parse_diag: use_xml.ParseDiagnostics = .{};
+    var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
         std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
         return err;
     };
@@ -66,8 +66,8 @@ const Size = struct {
     pub fn parseXml(s: []const u8) !Size {
         const x = std.mem.indexOfScalar(u8, s, 'x') orelse return error.InvalidSize;
         return .{
-            .width = try xml.parse.int(u32, s[0..x]),
-            .height = try xml.parse.int(u32, s[x + 1 ..]),
+            .width = try use_xml.parse.int(u32, s[0..x]),
+            .height = try use_xml.parse.int(u32, s[x + 1 ..]),
         };
     }
 };
@@ -75,13 +75,13 @@ const Size = struct {
 /// A custom parser for `attrWith` / `textWith`.
 fn parsePercent(s: []const u8) !f64 {
     if (s.len == 0 or s[s.len - 1] != '%') return error.MissingPercentSign;
-    return try xml.parse.float(f64, s[0 .. s.len - 1]) / 100;
+    return try use_xml.parse.float(f64, s[0 .. s.len - 1]) / 100;
 }
 
 const Fit = enum { contain, cover };
 
 test "values" {
-    var doc = try xml.Document.parse(t.allocator,
+    var doc = try use_xml.Document.parse(t.allocator,
         \\<image size="640x480" fit="cover" opacity="25%" unit="px" created="2026-11-23T10:00:00Z"/>
     , .{});
     defer doc.deinit();
@@ -90,8 +90,8 @@ test "values" {
     const size = try img.attr(Size, "size"); // hook
     const fit = try img.attr(Fit, "fit"); // enum by tag name
     const opacity = try img.attrWith("opacity", parsePercent); // custom parser
-    const unit = try img.attrWith("unit", xml.parse.oneOf(&.{ "px", "em" }));
-    const created = try img.attr(xml.Timestamp, "created");
+    const unit = try img.attrWith("unit", use_xml.parse.oneOf(&.{ "px", "em" }));
+    const created = try img.attr(use_xml.Timestamp, "created");
 
     try t.expectEqual(Size{ .width = 640, .height = 480 }, size);
     try t.expectEqual(Fit.cover, fit);
@@ -104,7 +104,7 @@ test "values" {
 // ------------------------------------------------------------------ Unused data
 
 test "unused data" {
-    var doc = try xml.Document.parse(t.allocator,
+    var doc = try use_xml.Document.parse(t.allocator,
         \\<config version="2">
         \\  <server host="localhost" port="8080" tls="true"/>
         \\  <logging level="debug"/>
@@ -135,7 +135,7 @@ test "unused data" {
 // ------------------------------------------------------------------ Errors
 
 test "errors" {
-    var doc = try xml.Document.parse(t.allocator, "<server port=\"80x\"/>", .{});
+    var doc = try use_xml.Document.parse(t.allocator, "<server port=\"80x\"/>", .{});
     defer doc.deinit();
 
     try t.expectError(error.InvalidValue, doc.root().attr(u16, "port"));
@@ -145,8 +145,8 @@ test "errors" {
         try std.fmt.bufPrint(&buf, "{f}", .{doc.diagnostics()}),
     );
 
-    var parse_diag: xml.ParseDiagnostics = .{};
-    try t.expectError(error.InvalidXml, xml.Document.parse(t.allocator, "<a>\n<b></a>", .{ .diagnostics = &parse_diag }));
+    var parse_diag: use_xml.ParseDiagnostics = .{};
+    try t.expectError(error.InvalidXml, use_xml.Document.parse(t.allocator, "<a>\n<b></a>", .{ .diagnostics = &parse_diag }));
     try t.expectEqualStrings(
         "invalid XML at line 2, column 4: end tag does not match start tag",
         try std.fmt.bufPrint(&buf, "{f}", .{parse_diag}),

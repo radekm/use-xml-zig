@@ -30,7 +30,7 @@ exe.root_module.addImport("use_xml", use_xml.module("use_xml"));
 ```zig
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const xml = @import("use_xml");
+const use_xml = @import("use_xml");
 
 const Person = struct {
     name: []const u8, // owned by `gpa`
@@ -41,8 +41,8 @@ const Person = struct {
 /// Reads `<people><person name="…" age="…"><email>…</email></person>…</people>`.
 /// The result is allocated in `arena`.
 fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
-    var parse_diag: xml.ParseDiagnostics = .{};
-    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+    var parse_diag: use_xml.ParseDiagnostics = .{};
+    var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
         std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
         return err;
     };
@@ -67,7 +67,7 @@ fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
 
 The steps are always the same:
 
-1. `xml.Document.parse` reads the whole input (in memory, UTF-8) into a tree. Invalid XML fails
+1. `use_xml.Document.parse` reads the whole input (in memory, UTF-8) into a tree. Invalid XML fails
    with `error.InvalidXml`.
 2. Starting from `doc.root()`, you ask for attributes, child elements and text. Each request
    marks the data as *used*.
@@ -112,7 +112,7 @@ A few rules:
 | `f32`, `f64`        | `1`, `-0.5`, `+007.25` (no exponent, no `inf` / `nan`) |
 | `bool`              | `true`, `false` |
 | enums               | the name of a tag, e.g. `red` |
-| `xml.Timestamp`     | `2021-05-31T23:12:04Z`, `2021-05-31 23:12:04.123Z` (UTC only) |
+| `use_xml.Timestamp`     | `2021-05-31T23:12:04Z`, `2021-05-31 23:12:04.123Z` (UTC only) |
 | your own type       | anything its `parseXml` accepts (see below) |
 
 Other conversions are done by custom parsers:
@@ -126,8 +126,8 @@ const Size = struct {
     pub fn parseXml(s: []const u8) !Size {
         const x = std.mem.indexOfScalar(u8, s, 'x') orelse return error.InvalidSize;
         return .{
-            .width = try xml.parse.int(u32, s[0..x]),
-            .height = try xml.parse.int(u32, s[x + 1 ..]),
+            .width = try use_xml.parse.int(u32, s[0..x]),
+            .height = try use_xml.parse.int(u32, s[x + 1 ..]),
         };
     }
 };
@@ -135,7 +135,7 @@ const Size = struct {
 /// A custom parser for `attrWith` / `textWith`.
 fn parsePercent(s: []const u8) !f64 {
     if (s.len == 0 or s[s.len - 1] != '%') return error.MissingPercentSign;
-    return try xml.parse.float(f64, s[0 .. s.len - 1]) / 100;
+    return try use_xml.parse.float(f64, s[0 .. s.len - 1]) / 100;
 }
 
 const Fit = enum { contain, cover };
@@ -144,15 +144,15 @@ const Fit = enum { contain, cover };
 const size = try img.attr(Size, "size"); // hook
 const fit = try img.attr(Fit, "fit"); // enum by tag name
 const opacity = try img.attrWith("opacity", parsePercent); // custom parser
-const unit = try img.attrWith("unit", xml.parse.oneOf(&.{ "px", "em" }));
-const created = try img.attr(xml.Timestamp, "created");
+const unit = try img.attrWith("unit", use_xml.parse.oneOf(&.{ "px", "em" }));
+const created = try img.attr(use_xml.Timestamp, "created");
 ```
 
 - `attrWith` / `textWith` take any function `fn ([]const u8) E!R`. Its error is returned
   unchanged.
 - A type with `pub fn parseXml([]const u8) !T` can be used directly as `T`. Errors of the hook are
   returned as `error.InvalidValue`.
-- The built-in parsers are available as `xml.parse.int`, `float`, `boolean`, `enumTag`,
+- The built-in parsers are available as `use_xml.parse.int`, `float`, `boolean`, `enumTag`,
   `timestamp` and `oneOf`, so custom parsers can reuse them.
 
 ## Memory
@@ -175,7 +175,7 @@ arena (as in the quick start), and free the document before returning.
 
 Zig errors can't carry data, so the details are stored separately:
 
-- XML syntax errors (`error.InvalidXml` from `Document.parse`) go to `xml.ParseDiagnostics`, passed in
+- XML syntax errors (`error.InvalidXml` from `Document.parse`) go to `use_xml.ParseDiagnostics`, passed in
   `Document.Options.diagnostics`, e.g. `invalid XML at line 2, column 4: end tag does not match start tag`.
 - All other errors are recorded by the document; `doc.diagnostics()` returns the last one:
 

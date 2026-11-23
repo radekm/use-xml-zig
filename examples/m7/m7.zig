@@ -6,7 +6,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const xml = @import("use_xml");
+const use_xml = @import("use_xml");
 
 pub const message = @embedFile("message.xml");
 
@@ -14,7 +14,7 @@ pub const Order = struct {
     order_id: u64,
     price: i64,
     quantity: u32,
-    entry_time: xml.Timestamp,
+    entry_time: use_xml.Timestamp,
 };
 
 pub const OrderBookDelta = struct {
@@ -39,8 +39,8 @@ pub fn parseOrderBookDelta(
     input: []const u8,
     err_out: ?*std.Io.Writer,
 ) ![]OrderBookDelta {
-    var parse_diag: xml.ParseDiagnostics = .{};
-    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+    var parse_diag: use_xml.ParseDiagnostics = .{};
+    var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
         if (err_out) |w| {
             if (err == error.InvalidXml) {
                 w.print("{s}: {f}", .{ @errorName(err), parse_diag }) catch {};
@@ -58,7 +58,7 @@ pub fn parseOrderBookDelta(
     };
 }
 
-fn extract(doc: *xml.Document, out: Allocator) ![]OrderBookDelta {
+fn extract(doc: *use_xml.Document, out: Allocator) ![]OrderBookDelta {
     const root = doc.root();
 
     // The header is not needed.
@@ -71,7 +71,7 @@ fn extract(doc: *xml.Document, out: Allocator) ![]OrderBookDelta {
         _ = try book.attrOpt(i64, "lastPx");
         _ = try book.attrOpt(u32, "lastQty");
         _ = try book.attrOpt(u32, "totalQty");
-        _ = try book.attrOpt(xml.Timestamp, "lastTradeTime");
+        _ = try book.attrOpt(use_xml.Timestamp, "lastTradeTime");
         _ = try book.attrOpt(i32, "pxDir");
         _ = try book.attrOpt(i64, "highPx");
         _ = try book.attrOpt(i64, "lowPx");
@@ -89,7 +89,7 @@ fn extract(doc: *xml.Document, out: Allocator) ![]OrderBookDelta {
     return result;
 }
 
-fn parseOrders(out: Allocator, list: ?*xml.Elem) ![]const Order {
+fn parseOrders(out: Allocator, list: ?*use_xml.Elem) ![]const Order {
     const entries = if (list) |l| try l.children("OrdrBookEntry") else return &.{};
     const orders = try out.alloc(Order, entries.len);
     for (entries, orders) |e, *order| {
@@ -97,13 +97,13 @@ fn parseOrders(out: Allocator, list: ?*xml.Elem) ![]const Order {
             .order_id = try e.attr(u64, "ordrId"),
             .price = try e.attr(i64, "px"),
             .quantity = try e.attr(u32, "qty"),
-            .entry_time = try e.attr(xml.Timestamp, "ordrEntryTime"),
+            .entry_time = try e.attr(use_xml.Timestamp, "ordrEntryTime"),
         };
     }
     return orders;
 }
 
-fn report(err_out: ?*std.Io.Writer, err: anyerror, diag: xml.Diagnostics) void {
+fn report(err_out: ?*std.Io.Writer, err: anyerror, diag: use_xml.Diagnostics) void {
     const w = err_out orelse return;
     if (diag.kind == .none) {
         w.print("{s}", .{@errorName(err)}) catch {};
@@ -136,7 +136,7 @@ test "parse the M7 message" {
         .order_id = 505982385,
         .price = 57,
         .quantity = 0,
-        .entry_time = try xml.Timestamp.parse("2022-11-12T10:02:54.553Z"),
+        .entry_time = try use_xml.Timestamp.parse("2022-11-12T10:02:54.553Z"),
     }, first.buy[0]);
 
     const third = deltas[2];

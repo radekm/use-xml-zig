@@ -5,7 +5,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const xml = @import("use_xml");
+const use_xml = @import("use_xml");
 const m7 = @import("m7");
 
 pub fn main(init: std.process.Init) !void {
@@ -28,7 +28,7 @@ pub fn main(init: std.process.Init) !void {
 }
 
 fn parseOnly(gpa: Allocator, input: []const u8) !void {
-    var doc = try xml.Document.parse(gpa, input, .{});
+    var doc = try use_xml.Document.parse(gpa, input, .{});
     doc.deinit();
 }
 

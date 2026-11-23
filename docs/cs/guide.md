@@ -30,7 +30,7 @@ exe.root_module.addImport("use_xml", use_xml.module("use_xml"));
 ```zig
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const xml = @import("use_xml");
+const use_xml = @import("use_xml");
 
 const Person = struct {
     name: []const u8, // owned by `gpa`
@@ -41,8 +41,8 @@ const Person = struct {
 /// Reads `<people><person name="…" age="…"><email>…</email></person>…</people>`.
 /// The result is allocated in `arena`.
 fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
-    var parse_diag: xml.ParseDiagnostics = .{};
-    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+    var parse_diag: use_xml.ParseDiagnostics = .{};
+    var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
         std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
         return err;
     };
@@ -67,7 +67,7 @@ fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
 
 Postup je vždy stejný:
 
-1. `xml.Document.parse` načte celý vstup (v paměti, UTF-8) do stromu. Nevalidní XML selže
+1. `use_xml.Document.parse` načte celý vstup (v paměti, UTF-8) do stromu. Nevalidní XML selže
    s `error.InvalidXml`.
 2. Od `doc.root()` se ptáte na atributy, podelementy a text. Každý dotaz označí data jako
    *použitá*.
@@ -111,7 +111,7 @@ Několik pravidel:
 | `f32`, `f64`        | `1`, `-0.5`, `+007.25` (bez exponentu, bez `inf` / `nan`) |
 | `bool`              | `true`, `false` |
 | enumy               | jméno tagu, např. `red` |
-| `xml.Timestamp`     | `2021-05-31T23:12:04Z`, `2021-05-31 23:12:04.123Z` (jen UTC) |
+| `use_xml.Timestamp`     | `2021-05-31T23:12:04Z`, `2021-05-31 23:12:04.123Z` (jen UTC) |
 | vlastní typ         | cokoli, co přijme jeho `parseXml` (viz níže) |
 
 Jiné převody zajistí vlastní parsery:
@@ -125,8 +125,8 @@ const Size = struct {
     pub fn parseXml(s: []const u8) !Size {
         const x = std.mem.indexOfScalar(u8, s, 'x') orelse return error.InvalidSize;
         return .{
-            .width = try xml.parse.int(u32, s[0..x]),
-            .height = try xml.parse.int(u32, s[x + 1 ..]),
+            .width = try use_xml.parse.int(u32, s[0..x]),
+            .height = try use_xml.parse.int(u32, s[x + 1 ..]),
         };
     }
 };
@@ -134,7 +134,7 @@ const Size = struct {
 /// A custom parser for `attrWith` / `textWith`.
 fn parsePercent(s: []const u8) !f64 {
     if (s.len == 0 or s[s.len - 1] != '%') return error.MissingPercentSign;
-    return try xml.parse.float(f64, s[0 .. s.len - 1]) / 100;
+    return try use_xml.parse.float(f64, s[0 .. s.len - 1]) / 100;
 }
 
 const Fit = enum { contain, cover };
@@ -143,15 +143,15 @@ const Fit = enum { contain, cover };
 const size = try img.attr(Size, "size"); // hook
 const fit = try img.attr(Fit, "fit"); // enum by tag name
 const opacity = try img.attrWith("opacity", parsePercent); // custom parser
-const unit = try img.attrWith("unit", xml.parse.oneOf(&.{ "px", "em" }));
-const created = try img.attr(xml.Timestamp, "created");
+const unit = try img.attrWith("unit", use_xml.parse.oneOf(&.{ "px", "em" }));
+const created = try img.attr(use_xml.Timestamp, "created");
 ```
 
 - `attrWith` / `textWith` berou libovolnou funkci `fn ([]const u8) E!R`. Její chyba se vrátí
   beze změny.
 - Typ s `pub fn parseXml([]const u8) !T` lze použít přímo jako `T`. Chyby hooku se vrací jako
   `error.InvalidValue`.
-- Vestavěné parsery jsou k dispozici jako `xml.parse.int`, `float`, `boolean`, `enumTag`,
+- Vestavěné parsery jsou k dispozici jako `use_xml.parse.int`, `float`, `boolean`, `enumTag`,
   `timestamp` a `oneOf`, takže je vlastní parsery mohou využít.
 
 ## Paměť
@@ -174,7 +174,7 @@ Obvyklý postup je parsovat ve funkci, potřebná data zkopírovat do vlastních
 
 Chyby v Zigu nemohou nést data, proto se podrobnosti ukládají zvlášť:
 
-- Syntaktické chyby XML (`error.InvalidXml` z `Document.parse`) jdou do `xml.ParseDiagnostics`,
+- Syntaktické chyby XML (`error.InvalidXml` z `Document.parse`) jdou do `use_xml.ParseDiagnostics`,
   předané v `Document.Options.diagnostics`, např.
   `invalid XML at line 2, column 4: end tag does not match start tag`.
 - Všechny ostatní chyby si zaznamenává dokument; `doc.diagnostics()` vrátí tu poslední:

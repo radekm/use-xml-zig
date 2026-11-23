@@ -29,18 +29,18 @@ ze Zigu:
 
 ```zig
 const std = @import("std");
-const xml = @import("use_xml");
+const use_xml = @import("use_xml");
 
 const Person = struct {
     name: []const u8, // owned by `gpa`
     address: ?[]const u8, // owned by `gpa`
     age: u8,
-    born: xml.Timestamp,
+    born: use_xml.Timestamp,
 };
 
 fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
-    var parse_diag: xml.ParseDiagnostics = .{};
-    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+    var parse_diag: use_xml.ParseDiagnostics = .{};
+    var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
         std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
         return err;
     };
@@ -58,7 +58,7 @@ fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
             .name = try p.attrAlloc(gpa, []const u8, "name"),
             .address = try p.attrOptAlloc(gpa, []const u8, "address"),
             .age = try p.attr(u8, "age"),
-            .born = try (try p.child("born")).text(xml.Timestamp),
+            .born = try (try p.child("born")).text(use_xml.Timestamp),
         };
     }
 
@@ -264,7 +264,7 @@ Vestavěné typy:
 | `f32`, `f64`              | volitelné znaménko, číslice, volitelně `.` následovaná číslicemi (`1`, `-0.5`, `+007.25`); žádný exponent, žádné `inf` / `nan`, žádný šestnáctkový tvar, žádné `.5` ani `5.` |
 | `bool`                    | přesně `true` nebo `false` (záleží na velikosti písmen) |
 | `enum`                    | přesně jméno jednoho z tagů (`@tagName`) |
-| `xml.Timestamp`           | viz níže |
+| `use_xml.Timestamp`           | viz níže |
 | `?T`                      | není povoleno. Použij varianty `Opt`. |
 
 Uživatelské typy mohou definovat hook, který `attr` / `text` najdou automaticky:
@@ -276,10 +276,10 @@ pub fn parseXmlAlloc(gpa: Allocator, s: []const u8) !@This();    // used by ...A
 
 Hook má přednost před vestavěným parsováním (enum s `parseXml` se tedy neparsuje podle jména tagu).
 
-Modul `xml.parse` obsahuje vestavěné parsery jako obyčejné funkce vracející
+Modul `use_xml.parse` obsahuje vestavěné parsery jako obyčejné funkce vracející
 `error{InvalidValue}!T`, takže je lze kombinovat ve vlastních parserech:
-`xml.parse.int(u32, s)`, `xml.parse.float(f64, s)`, `xml.parse.boolean(s)`,
-`xml.parse.enumTag(E, s)`, `xml.parse.timestamp(s)` a `xml.parse.oneOf(&.{ "a", "b" })`
+`use_xml.parse.int(u32, s)`, `use_xml.parse.float(f64, s)`, `use_xml.parse.boolean(s)`,
+`use_xml.parse.enumTag(E, s)`, `use_xml.parse.timestamp(s)` a `use_xml.parse.oneOf(&.{ "a", "b" })`
 (vrací parser pro `attrWith` / `textWith`).
 
 ### `Timestamp`
@@ -344,8 +344,8 @@ Chyby se popisují na dvou místech:
 parsuje. Typický vzor:
 
 ```zig
-var parse_diag: xml.ParseDiagnostics = .{};
-var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+var parse_diag: use_xml.ParseDiagnostics = .{};
+var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
     std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
     return err;
 };

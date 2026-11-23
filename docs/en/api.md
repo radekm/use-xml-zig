@@ -29,18 +29,18 @@ come from Zig:
 
 ```zig
 const std = @import("std");
-const xml = @import("use_xml");
+const use_xml = @import("use_xml");
 
 const Person = struct {
     name: []const u8, // owned by `gpa`
     address: ?[]const u8, // owned by `gpa`
     age: u8,
-    born: xml.Timestamp,
+    born: use_xml.Timestamp,
 };
 
 fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
-    var parse_diag: xml.ParseDiagnostics = .{};
-    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+    var parse_diag: use_xml.ParseDiagnostics = .{};
+    var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
         std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
         return err;
     };
@@ -58,7 +58,7 @@ fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
             .name = try p.attrAlloc(gpa, []const u8, "name"),
             .address = try p.attrOptAlloc(gpa, []const u8, "address"),
             .age = try p.attr(u8, "age"),
-            .born = try (try p.child("born")).text(xml.Timestamp),
+            .born = try (try p.child("born")).text(use_xml.Timestamp),
         };
     }
 
@@ -265,7 +265,7 @@ Built-in types:
 | `f32`, `f64`            | optional sign, digits, optionally `.` followed by digits (`1`, `-0.5`, `+007.25`); no exponent, no `inf` / `nan`, no hexadecimal form, no `.5` or `5.` |
 | `bool`                  | exactly `true` or `false` (case-sensitive) |
 | `enum`                  | exactly the name of one of the tags (`@tagName`) |
-| `xml.Timestamp`         | see below |
+| `use_xml.Timestamp`         | see below |
 | `?T`                    | not allowed. Use the `Opt` variants instead. |
 
 User types can define a hook that `attr` / `text` find automatically:
@@ -278,10 +278,10 @@ pub fn parseXmlAlloc(gpa: Allocator, s: []const u8) !@This();    // used by ...A
 A hook takes precedence over the built-in parsing (so an enum with `parseXml` is not parsed by tag
 name).
 
-The module `xml.parse` contains the built-in parsers as plain functions returning
+The module `use_xml.parse` contains the built-in parsers as plain functions returning
 `error{InvalidValue}!T`, so they can be combined in custom parsers:
-`xml.parse.int(u32, s)`, `xml.parse.float(f64, s)`, `xml.parse.boolean(s)`,
-`xml.parse.enumTag(E, s)`, `xml.parse.timestamp(s)` and `xml.parse.oneOf(&.{ "a", "b" })`
+`use_xml.parse.int(u32, s)`, `use_xml.parse.float(f64, s)`, `use_xml.parse.boolean(s)`,
+`use_xml.parse.enumTag(E, s)`, `use_xml.parse.timestamp(s)` and `use_xml.parse.oneOf(&.{ "a", "b" })`
 (returns a parser for `attrWith` / `textWith`).
 
 ### `Timestamp`
@@ -346,8 +346,8 @@ Errors are described in two places:
 responsible for that. Typical pattern:
 
 ```zig
-var parse_diag: xml.ParseDiagnostics = .{};
-var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+var parse_diag: use_xml.ParseDiagnostics = .{};
+var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
     std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
     return err;
 };

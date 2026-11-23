@@ -72,7 +72,7 @@ pub fn timestamp(s: []const u8) Error!Timestamp {
 }
 
 /// Returns a parser that accepts only the given strings (and returns the input).
-/// Usage: `e.attrWith("unit", xml.parse.oneOf(&.{ "kg", "g" }))`.
+/// Usage: `e.attrWith("unit", use_xml.parse.oneOf(&.{ "kg", "g" }))`.
 pub fn oneOf(comptime cases: []const []const u8) fn ([]const u8) Error![]const u8 {
     return struct {
         fn parse(s: []const u8) Error![]const u8 {

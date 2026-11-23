@@ -6,7 +6,7 @@ Knihovna v Zigu pro extrakci dat z XML, která vám řekne, **která data jste n
 Je inspirovaná knihovnou [UseData.Xml](https://github.com/radekm/UseData.Xml) a obsahuje vlastní XML parser.
 
 ```zig
-var doc = try xml.Document.parse(gpa, input, .{});
+var doc = try use_xml.Document.parse(gpa, input, .{});
 defer doc.deinit();
 errdefer std.log.err("{f}", .{doc.diagnostics()}); // e.g. /people/person[1]: "nick": attribute was not used (input: "b")
 
