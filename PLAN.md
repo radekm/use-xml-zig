@@ -59,7 +59,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 ## Milestones
 
 - [x] **M0 — Project setup:** `AGENTS`, `PLAN`, `README` (EN + CS), `build.zig` skeleton.
-- [ ] **M1 — API design:** `docs/en/api.md` + `docs/cs/api.md`, approved by the owner.
+- [x] **M1 — API design:** `docs/en/api.md` + `docs/cs/api.md`, approved by the owner.
 - [ ] **M2 — XML parser:** tokenizer + tree builder (iterative, no recursion per nesting level),
       line/column in error diagnostics, well-formedness tests (incl. invalid inputs from
       UseData.Xml tests).

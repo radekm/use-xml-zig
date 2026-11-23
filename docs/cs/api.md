@@ -1,9 +1,8 @@
-# Návrh API (koncept pro M1)
+# Návrh API
 
 Anglická verze: [../en/api.md](../en/api.md).
 
-> Stav: **koncept**, čeká na schválení vlastníkem. Názvy a signatury se ještě mohou změnit.
-> Formáty hodnot a otázky zodpovězené 2026-11-23 jsou rozhodnuté.
+> Stav: **schváleno** (2026-11-23). Změny musí schválit vlastník.
 
 ## Myšlenka
 

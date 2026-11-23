@@ -59,7 +59,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 ## Milníky
 
 - [x] **M0 — Založení projektu:** `AGENTS`, `PLAN`, `README` (EN + CS), kostra `build.zig`.
-- [ ] **M1 — Návrh API:** `docs/en/api.md` + `docs/cs/api.md`, schválené vlastníkem.
+- [x] **M1 — Návrh API:** `docs/en/api.md` + `docs/cs/api.md`, schválené vlastníkem.
 - [ ] **M2 — XML parser:** tokenizer + stavba stromu (iterativně, bez rekurze na úroveň zanoření),
       řádek/sloupec v diagnostice chyb, testy well-formedness (včetně nevalidních vstupů z testů
       UseData.Xml).

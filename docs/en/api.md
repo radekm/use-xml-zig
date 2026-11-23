@@ -1,9 +1,8 @@
-# API design (draft for M1)
+# API design
 
 Czech version: [../cs/api.md](../cs/api.md).
 
-> Status: **draft**, waiting for the owner's approval. Names and signatures may still change.
-> The value formats and the questions answered on 2026-11-23 are settled.
+> Status: **approved** (2026-11-23). Changes must be approved by the owner.
 
 ## Idea
 
