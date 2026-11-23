@@ -17,14 +17,14 @@ const Person = struct {
 /// Reads `<people><person name="…" age="…"><email>…</email></person>…</people>`.
 /// The result is allocated in `arena`.
 fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
-    var diag: xml.Diagnostics = .{};
-    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &diag }) catch |err| {
-        std.log.err("{s}: {f}", .{ @errorName(err), diag });
+    var parse_diag: xml.ParseDiagnostics = .{};
+    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+        std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
         return err;
     };
     defer doc.deinit();
-    // Runs before `doc.deinit()`, while `diag` is still valid.
-    errdefer std.log.err("{f}", .{diag});
+    // Runs before `doc.deinit()`, while the diagnostics are still valid.
+    errdefer std.log.err("{f}", .{doc.diagnostics()});
 
     const persons = try doc.root().children("person");
     const result = try arena.alloc(Person, persons.len);
@@ -135,14 +135,20 @@ test "unused data" {
 // ------------------------------------------------------------------ Errors
 
 test "errors" {
-    var diag: xml.Diagnostics = .{};
-    var doc = try xml.Document.parse(t.allocator, "<server port=\"80x\"/>", .{ .diagnostics = &diag });
+    var doc = try xml.Document.parse(t.allocator, "<server port=\"80x\"/>", .{});
     defer doc.deinit();
 
     try t.expectError(error.InvalidValue, doc.root().attr(u16, "port"));
     var buf: [128]u8 = undefined;
     try t.expectEqualStrings(
         "/server: \"port\": expected integer (u16) (input: \"80x\")",
-        try std.fmt.bufPrint(&buf, "{f}", .{diag}),
+        try std.fmt.bufPrint(&buf, "{f}", .{doc.diagnostics()}),
+    );
+
+    var parse_diag: xml.ParseDiagnostics = .{};
+    try t.expectError(error.InvalidXml, xml.Document.parse(t.allocator, "<a>\n<b></a>", .{ .diagnostics = &parse_diag }));
+    try t.expectEqualStrings(
+        "invalid XML at line 2, column 4: end tag does not match start tag",
+        try std.fmt.bufPrint(&buf, "{f}", .{parse_diag}),
     );
 }

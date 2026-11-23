@@ -3,6 +3,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Diagnostics = @import("Diagnostics.zig");
+const ParseDiagnostics = @import("ParseDiagnostics.zig");
 const Elem = @import("Elem.zig");
 const parser = @import("parser.zig");
 
@@ -12,13 +13,13 @@ ctx: *Context,
 
 /// Options for `parse`.
 pub const Options = struct {
-    /// Filled in when `parse` or any extraction function fails.
-    diagnostics: ?*Diagnostics = null,
+    /// Filled in when `parse` fails with `error.InvalidXml`.
+    diagnostics: ?*ParseDiagnostics = null,
     /// Maximum element nesting depth. Deeper input fails with error.InvalidXml.
     max_depth: u32 = 256,
 };
 
-/// Errors of `parse`. Details of `InvalidXml` are in `Options.diagnostics`.
+/// Errors of `parse`. Details of `InvalidXml` go to `Options.diagnostics`.
 pub const ParseError = error{ InvalidXml, OutOfMemory };
 
 /// Internal state shared by the document and its elements.
@@ -27,7 +28,8 @@ pub const Context = struct {
     gpa: Allocator,
     arena: std.heap.ArenaAllocator,
     input: []const u8,
-    diagnostics: ?*Diagnostics,
+    /// The last error of an extraction function or of `expectAllUsed`.
+    diag: Diagnostics = .{},
     root: *Elem,
     /// All elements in document order.
     elems: []const *Elem,
@@ -42,14 +44,13 @@ pub fn parse(gpa: Allocator, input: []const u8, options: Options) ParseError!Doc
         .gpa = gpa,
         .arena = .init(gpa),
         .input = input,
-        .diagnostics = options.diagnostics,
         .root = undefined,
         .elems = &.{},
     };
     errdefer ctx.arena.deinit();
     if (options.diagnostics) |d| d.* = .{};
 
-    ctx.root = try parser.parse(ctx, options.max_depth);
+    ctx.root = try parser.parse(ctx, options.max_depth, options.diagnostics);
     ctx.root.visited = true;
     return .{ .ctx = ctx };
 }
@@ -68,6 +69,12 @@ pub fn root(doc: *Document) *Elem {
     return doc.ctx.root;
 }
 
+/// Details about the last error of an extraction function (`attr`, `child`, …) or of
+/// `expectAllUsed`. Valid only until `deinit`: report the error before freeing the document.
+pub fn diagnostics(doc: *const Document) Diagnostics {
+    return doc.ctx.diag;
+}
+
 // ------------------------------------------------------------------ unused data
 
 /// Iterates over visited elements (the root and all elements returned by `child*` / `children`)
@@ -76,26 +83,25 @@ pub fn unused(doc: *Document) UnusedIterator {
     return .{ .elems = doc.ctx.elems };
 }
 
-/// Returns error.UnusedData (and fills `diagnostics`) if anything was not used.
-/// Call it after extraction.
+/// Returns error.UnusedData if anything was not used; `diagnostics()` then describes
+/// the first unused item. Call it after extraction.
 pub fn expectAllUsed(doc: *Document) error{UnusedData}!void {
     var it = doc.unused();
     const u = it.next() orelse return;
-    if (doc.ctx.diagnostics) |d| {
-        d.* = .{ .kind = .unused_data, .elem = u.elem, .message = "" };
-        var attrs = u.attrs;
-        var children = u.children;
-        if (attrs.next()) |a| {
-            d.selector = a.name;
-            d.input = a.value;
-            d.message = "attribute was not used";
-        } else if (children.next()) |name| {
-            d.selector = name;
-            d.message = "child elements were not used";
-        } else {
-            d.input = u.text;
-            d.message = "text was not used";
-        }
+    const d = &doc.ctx.diag;
+    d.* = .{ .kind = .unused_data, .elem = u.elem };
+    var attrs = u.attrs;
+    var children = u.children;
+    if (attrs.next()) |a| {
+        d.selector = a.name;
+        d.input = a.value;
+        d.message = "attribute was not used";
+    } else if (children.next()) |name| {
+        d.selector = name;
+        d.message = "child elements were not used";
+    } else {
+        d.input = u.text;
+        d.message = "text was not used";
     }
     return error.UnusedData;
 }

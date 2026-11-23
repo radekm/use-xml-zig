@@ -68,15 +68,14 @@ test "unused text" {
 }
 
 test "nothing unused" {
-    var diag: Diagnostics = .{};
-    var doc = try Document.parse(t.allocator, company_input, .{ .diagnostics = &diag });
+    var doc = try Document.parse(t.allocator, company_input, .{});
     defer doc.deinit();
     const address = try doc.root().child("address");
     _ = try (try address.child("city")).text([]const u8);
     _ = try (try address.child("street")).text([]const u8);
     try expectReport(&doc, "");
     try doc.expectAllUsed();
-    try t.expectEqual(Diagnostics.Kind.none, diag.kind);
+    try t.expectEqual(Diagnostics.Kind.none, doc.diagnostics().kind);
 }
 
 test "nothing requested: only the root is reported" {
@@ -149,13 +148,12 @@ test "expectAllUsed describes the first unused item" {
         .{ "<r>hello</r>", "/r: text was not used (input: \"hello\")" },
     };
     for (cases) |case| {
-        var diag: Diagnostics = .{};
-        var doc = try Document.parse(t.allocator, case[0], .{ .diagnostics = &diag });
+        var doc = try Document.parse(t.allocator, case[0], .{});
         defer doc.deinit();
         try t.expectError(error.UnusedData, doc.expectAllUsed());
-        try t.expectEqual(Diagnostics.Kind.unused_data, diag.kind);
+        try t.expectEqual(Diagnostics.Kind.unused_data, doc.diagnostics().kind);
         var buf: [256]u8 = undefined;
-        try t.expectEqualStrings(case[1], try std.fmt.bufPrint(&buf, "{f}", .{diag}));
+        try t.expectEqualStrings(case[1], try std.fmt.bufPrint(&buf, "{f}", .{doc.diagnostics()}));
     }
 }
 

@@ -22,7 +22,7 @@ ze Zigu:
 | `children "a" (fun e -> …)` vrací `'T[]`            | `children("a")` vrací `[]const *Elem` (smyčka `for`)            |
 | closure `StringParser<'T>`                          | typ `T` známý v comptime, nebo funkce `fn([]const u8) !T`       |
 | `Dispose` + `ITracer` u každého elementu            | `doc.unused()` / `doc.expectAllUsed()` po extrakci              |
-| výjimky s daty (`WrongCount`, `ParseError`)         | Zig chyby + struktura `Diagnostics` s podrobnostmi              |
+| výjimky s daty (`WrongCount`, `ParseError`)         | Zig chyby + `doc.diagnostics()` / `ParseDiagnostics` s podrobnostmi |
 | GC                                                  | vypůjčené hodnoty, nebo varianty `...Alloc` s alokátorem volajícího |
 
 ## Příklad
@@ -39,12 +39,14 @@ const Person = struct {
 };
 
 fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
-    var diag: xml.Diagnostics = .{};
-    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &diag }) catch |err| {
-        std.log.err("{f}", .{diag});
+    var parse_diag: xml.ParseDiagnostics = .{};
+    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+        std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
         return err;
     };
     defer doc.deinit();
+    // Runs before `doc.deinit()`, while the diagnostics are still valid.
+    errdefer std.log.err("{f}", .{doc.diagnostics()});
 
     const root = doc.root(); // <people>
     const persons = try root.children("person");
@@ -61,7 +63,7 @@ fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
     }
 
     // Fails with error.UnusedData if something in the input was not used;
-    // `diag` then describes the first unused item.
+    // `doc.diagnostics()` then describes the first unused item.
     try doc.expectAllUsed();
     return result;
 }
@@ -74,8 +76,8 @@ fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
 ```zig
 pub const Document = struct {
     pub const Options = struct {
-        /// Filled in when `parse` or any extraction function fails.
-        diagnostics: ?*Diagnostics = null,
+        /// Filled in when `parse` fails with error.InvalidXml.
+        diagnostics: ?*ParseDiagnostics = null,
         /// Maximum element nesting depth. Deeper input fails with error.InvalidXml.
         max_depth: u32 = 256,
     };
@@ -88,9 +90,13 @@ pub const Document = struct {
     /// The root element.
     pub fn root(doc: *Document) *Elem;
 
+    /// Details about the last error of an extraction function or of `expectAllUsed`.
+    /// Valid only until `deinit`.
+    pub fn diagnostics(doc: *const Document) Diagnostics;
+
     /// Iterates over elements that have unused content (see "Unused data").
     pub fn unused(doc: *Document) UnusedIterator;
-    /// Returns error.UnusedData (and fills `diagnostics`) if anything was not used.
+    /// Returns error.UnusedData if anything was not used; `diagnostics()` describes it.
     pub fn expectAllUsed(doc: *Document) error{UnusedData}!void;
 };
 
@@ -183,10 +189,10 @@ pub const Error = error{
 ```
 
 Vlastní parsery (`...With`) smí vracet libovolnou chybu (nebo žádnou). Chyba projde beze změny
-a zaznamená se do `Diagnostics` (zprávou je název chyby).
+a zaznamená se do `doc.diagnostics()` (zprávou je název chyby).
 Chyby hooků `parseXml` / `parseXmlAlloc` se vrací jako `error.InvalidValue` (kromě
 `error.OutOfMemory`), aby `attr(T, …)` měla vždy množinu chyb `Error`. Původní název chyby je
-zprávou v `Diagnostics`.
+zprávou v `doc.diagnostics()`.
 
 ## Pravidla použití
 
@@ -227,7 +233,7 @@ while (it.next()) |u| std.log.warn("unused: {f}", .{u});
   mezi podelementy.
 - Atributy `xmlns` / `xmlns:*` se nikdy nehlásí.
 - `doc.expectAllUsed()` je zkratka, která selže s `error.UnusedData` u první položky a popíše ji
-  v `Diagnostics`.
+  v `doc.diagnostics()`.
 - Žádná z obou funkcí nealokuje ani nic nemění, takže je lze volat opakovaně; výsledek vždy
   odpovídá aktuálnímu stavu.
 
@@ -292,46 +298,60 @@ Přijímaný formát (jako `dateTimeOffset` v UseData.Xml):
 `YYYY-MM-DDTHH:MM:SS[.f…]Z`, kde `T` může být i jedna mezera a desetinná část má 1–9 číslic.
 Datum i čas se validují (délky měsíců, přestupné roky). Roky jsou 0000–9999.
 
-## `Diagnostics`
+## `ParseDiagnostics` a `Diagnostics`
 
 ```zig
+/// Errors of `Document.parse`. Doesn't point anywhere, so it is valid forever.
+pub const ParseDiagnostics = struct {
+    message: []const u8 = "", // static string; empty = no error
+    line: u32 = 0, // 1-based
+    column: u32 = 0, // 1-based, in code points
+
+    /// Prints e.g. `invalid XML at line 2, column 4: end tag does not match start tag`.
+    pub fn format(d: ParseDiagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void;
+};
+
+/// Errors of extraction functions and of `expectAllUsed`, recorded by the document.
 pub const Diagnostics = struct {
     kind: Kind = .none,
-    /// Element where the error happened (null for XML syntax errors).
+    /// Element where the error happened.
     elem: ?*const Elem = null,
-    /// Attribute name, child name, or null (text / syntax error).
+    /// Attribute name, child name, or null (text).
     selector: ?[]const u8 = null,
-    /// The string that failed to parse (InvalidValue / custom parser errors).
+    /// The string that failed to parse, the unused value, or null.
     input: ?[]const u8 = null,
     /// Human-readable message (static string or error name).
     message: []const u8 = "",
-    /// 1-based position in the input for XML syntax errors.
-    line: u32 = 0,
-    column: u32 = 0,
 
-    pub const Kind = enum { none, invalid_xml, wrong_count, already_used, invalid_value, unused_data };
+    pub const Kind = enum { none, wrong_count, already_used, invalid_value, unused_data };
 
-    /// Prints e.g. `/company/address[0]: attribute "city": expected exactly one`.
+    /// Prints e.g. `/company/address[0]: "city": attribute is missing`.
     pub fn format(d: Diagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void;
 };
 ```
 
-Pole se slicy ukazují do vstupu nebo do dokumentu, takže platí do `doc.deinit()`. Když selže
-`Document.parse`, nastaví se jen `kind`, `message`, `line` a `column`.
+Chyby se popisují na dvou místech:
 
-**`Diagnostics` vypiš (nebo jinak zpracuj) dřív, než zavoláš `doc.deinit()`.** Potom už `elem`,
-`selector` a `input` ukazují do uvolněné paměti. Za nahlášení chyby odpovídá kód, který dokument
+- **Syntaktické chyby XML** jdou do `ParseDiagnostics` předané v `Options.diagnostics` (když
+  `parse` selže, žádný dokument, kam je uložit, není). Neobsahuje žádné ukazatele, takže platí
+  navždy.
+- **Chyby extrakčních funkcí a `expectAllUsed`** si zaznamenává sám dokument; `doc.diagnostics()`
+  vrátí tu poslední. Její slicy ukazují do vstupu nebo do dokumentu, takže platí jen do
+  `doc.deinit()`. Protože je součástí dokumentu, je tato doba platnosti zřejmá.
+  `error.OutOfMemory` se nezaznamenává.
+
+**Chyby extrakce nahlas dřív, než zavoláš `doc.deinit()`.** Odpovídá za to kód, který dokument
 parsuje. Typický vzor:
 
 ```zig
-var diag: xml.Diagnostics = .{};
-var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &diag }) catch |err| {
-    std.log.err("{s}: {f}", .{ @errorName(err), diag }); // only static data, fine
+var parse_diag: xml.ParseDiagnostics = .{};
+var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+    std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
     return err;
 };
 defer doc.deinit();
 // `errdefer` declared after `defer doc.deinit()` runs before it.
-errdefer std.log.err("{f}", .{diag});
+errdefer std.log.err("{f}", .{doc.diagnostics()});
 ```
 
 Příklad `examples/m7/m7.zig` ukazuje totéž s writerem, který předá volající.
@@ -339,7 +359,7 @@ Příklad `examples/m7/m7.zig` ukazuje totéž s writerem, který předá volaj�
 ## Nedostatek paměti
 
 - `Document.parse`: při `error.OutOfMemory` se uvolní vše, co se do té doby alokovalo, a žádný
-  dokument se nevrátí. `Diagnostics` se nevyplní (samotná chyba říká dost).
+  dokument se nevrátí. `ParseDiagnostics` se nevyplní (samotná chyba říká dost).
 - Vyhledávání podle jména (`attr*`, `child*`, `children`) může vrátit `error.OutOfMemory` **jen
   tehdy, když jméno v elementu neexistuje**: jméno se pak zkopíruje do interní areny dokumentu,
   aby šlo odhalit druhé vyžádání. Existující jména žádnou alokaci nepotřebují.

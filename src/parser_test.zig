@@ -4,7 +4,7 @@ const std = @import("std");
 const t = std.testing;
 const Document = @import("Document.zig");
 const Elem = @import("Elem.zig");
-const Diagnostics = @import("Diagnostics.zig");
+const ParseDiagnostics = @import("ParseDiagnostics.zig");
 
 fn group(e: *const Elem, name: []const u8) []const *Elem {
     const g = e.findGroup(name) orelse return &.{};
@@ -27,10 +27,9 @@ fn expectInvalid(input: []const u8, message: []const u8, line: u32, column: u32)
 }
 
 fn expectInvalidWithDepth(input: []const u8, max_depth: u32, message: []const u8, line: u32, column: u32) !void {
-    var diag: Diagnostics = .{};
+    var diag: ParseDiagnostics = .{};
     const options: Document.Options = .{ .diagnostics = &diag, .max_depth = max_depth };
     try t.expectError(error.InvalidXml, Document.parse(t.allocator, input, options));
-    try t.expectEqual(Diagnostics.Kind.invalid_xml, diag.kind);
     try t.expectEqualStrings(message, diag.message);
     try t.expectEqual(line, diag.line);
     try t.expectEqual(column, diag.column);
@@ -305,7 +304,7 @@ test "invalid: nesting depth" {
 }
 
 test "diagnostics format" {
-    var diag: Diagnostics = .{};
+    var diag: ParseDiagnostics = .{};
     try t.expectError(error.InvalidXml, Document.parse(t.allocator, "<a>\n</b>", .{ .diagnostics = &diag }));
     var buf: [100]u8 = undefined;
     try t.expectEqualStrings(
@@ -340,13 +339,12 @@ test "randomly corrupted input never crashes" {
             }
             if (len == 0) break;
         }
-        var diag: Diagnostics = .{};
+        var diag: ParseDiagnostics = .{};
         if (Document.parse(t.allocator, buf[0..len], .{ .diagnostics = &diag })) |doc_const| {
             var doc = doc_const;
             doc.deinit();
         } else |err| {
             try t.expectEqual(error.InvalidXml, err);
-            try t.expectEqual(Diagnostics.Kind.invalid_xml, diag.kind);
             try t.expect(diag.line >= 1 and diag.column >= 1);
         }
     }

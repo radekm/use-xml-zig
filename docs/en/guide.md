@@ -41,14 +41,14 @@ const Person = struct {
 /// Reads `<people><person name="…" age="…"><email>…</email></person>…</people>`.
 /// The result is allocated in `arena`.
 fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
-    var diag: xml.Diagnostics = .{};
-    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &diag }) catch |err| {
-        std.log.err("{s}: {f}", .{ @errorName(err), diag });
+    var parse_diag: xml.ParseDiagnostics = .{};
+    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+        std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
         return err;
     };
     defer doc.deinit();
-    // Runs before `doc.deinit()`, while `diag` is still valid.
-    errdefer std.log.err("{f}", .{diag});
+    // Runs before `doc.deinit()`, while the diagnostics are still valid.
+    errdefer std.log.err("{f}", .{doc.diagnostics()});
 
     const persons = try doc.root().children("person");
     const result = try arena.alloc(Person, persons.len);
@@ -173,12 +173,14 @@ arena (as in the quick start), and free the document before returning.
 
 ## Errors
 
-Zig errors can't carry data, so details go to `xml.Diagnostics`, passed in
-`Document.Options.diagnostics`:
+Zig errors can't carry data, so the details are stored separately:
+
+- XML syntax errors (`error.InvalidXml` from `Document.parse`) go to `xml.ParseDiagnostics`, passed in
+  `Document.Options.diagnostics`, e.g. `invalid XML at line 2, column 4: end tag does not match start tag`.
+- All other errors are recorded by the document; `doc.diagnostics()` returns the last one:
 
 | Error            | `Diagnostics.kind` | Example of `"{f}"` |
 |------------------|--------------------|--------------------|
-| `InvalidXml`     | `invalid_xml`      | `invalid XML at line 2, column 4: end tag does not match start tag` |
 | `WrongCount`     | `wrong_count`      | `/person: "name": expected exactly one child element, found none` |
 | `AlreadyUsed`    | `already_used`     | `/a: "x": attribute was already used` |
 | `InvalidValue`   | `invalid_value`    | `/server: "port": expected integer (u16) (input: "80x")` |
@@ -186,9 +188,9 @@ Zig errors can't carry data, so details go to `xml.Diagnostics`, passed in
 | `UnusedData`     | `unused_data`      | `/config/server[0]: "tls": attribute was not used (input: "true")` |
 | `OutOfMemory`    | not filled in      | |
 
-**`Diagnostics` points into the document. Report the error before `doc.deinit()`.**
+**`doc.diagnostics()` points into the document, so report the error before `doc.deinit()`.**
 With `defer doc.deinit()` followed by `errdefer …` (as in the quick start) the `errdefer` runs first,
-so the diagnostics are still valid there.
+so the diagnostics are still valid there. `ParseDiagnostics` has no such limitation.
 
 ## Unused data
 
@@ -223,7 +225,7 @@ To mark data you intentionally don't need, request it and ignore the result
 inside the children.
 
 `doc.expectAllUsed()` is a shortcut: it fails with `error.UnusedData` and describes the first
-unused item in `Diagnostics`.
+unused item in `doc.diagnostics()`.
 
 ## Supported XML
 
@@ -244,7 +246,7 @@ adapted to Zig:
 - Instead of callbacks (`child "a" (fun e -> …)`), `child("a")` returns the element.
 - Unused data is checked once after extraction (`doc.unused()`, `doc.expectAllUsed()`), not when
   each element is disposed.
-- Errors are Zig errors plus `Diagnostics` instead of exceptions.
+- Errors are Zig errors plus `doc.diagnostics()` / `ParseDiagnostics` instead of exceptions.
 - `text` on an element with child elements is an error, not `""`.
 - `decimal` is not supported; numbers with a fraction are parsed as floats.
 

@@ -8,10 +8,9 @@ const Diagnostics = @import("Diagnostics.zig");
 
 const Fixture = struct {
     doc: Document,
-    diag: *Diagnostics,
 
-    fn init(input: []const u8, diag: *Diagnostics) !Fixture {
-        return .{ .doc = try Document.parse(t.allocator, input, .{ .diagnostics = diag }), .diag = diag };
+    fn init(input: []const u8) !Fixture {
+        return .{ .doc = try Document.parse(t.allocator, input, .{}) };
     }
 
     fn deinit(f: *Fixture) void {
@@ -23,23 +22,22 @@ const Fixture = struct {
     }
 
     fn expectDiag(f: *Fixture, kind: Diagnostics.Kind, formatted: []const u8) !void {
-        try t.expectEqual(kind, f.diag.kind);
+        try t.expectEqual(kind, f.doc.diagnostics().kind);
         var buf: [256]u8 = undefined;
-        try t.expectEqualStrings(formatted, try std.fmt.bufPrint(&buf, "{f}", .{f.diag.*}));
+        try t.expectEqualStrings(formatted, try std.fmt.bufPrint(&buf, "{f}", .{f.doc.diagnostics()}));
     }
 };
 
 // ------------------------------------------------------------------ UseData.Xml: Basic
 
 test "child elements" {
-    var diag: Diagnostics = .{};
     var f = try Fixture.init(
         \\<animals>
         \\    <dog>A</dog>
         \\    <pig>B</pig>
         \\    <dog>D</dog>
         \\</animals>
-    , &diag);
+    );
     defer f.deinit();
 
     const dogs = try f.root().children("dog");
@@ -51,13 +49,12 @@ test "child elements" {
 }
 
 test "attributes" {
-    var diag: Diagnostics = .{};
     var f = try Fixture.init(
         \\<people>
         \\    <person name="Pete" />
         \\    <person name="Harry" address="Little Whinging" />
         \\</people>
-    , &diag);
+    );
     defer f.deinit();
 
     const people = try f.root().children("person");
@@ -82,8 +79,7 @@ test "prefixes and default namespace are ignored" {
         \\</root>
     };
     for (inputs) |input| {
-        var diag: Diagnostics = .{};
-        var f = try Fixture.init(input, &diag);
+        var f = try Fixture.init(input);
         defer f.deinit();
         const tds = try (try (try f.root().child("table")).child("tr")).children("td");
         try t.expectEqual(1, tds.len);
@@ -94,33 +90,29 @@ test "prefixes and default namespace are ignored" {
 // ------------------------------------------------------------------ UseData.Xml: Errors
 
 test "multiple children when single child is expected" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<person><name>Peter</name><name>James</name></person>", &diag);
+    var f = try Fixture.init("<person><name>Peter</name><name>James</name></person>");
     defer f.deinit();
     try t.expectError(error.WrongCount, f.root().child("name"));
     try f.expectDiag(.wrong_count, "/person: \"name\": expected exactly one child element, found more than one");
 }
 
 test "multiple children when at most one child is expected" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<person><name>Peter</name><name>James</name></person>", &diag);
+    var f = try Fixture.init("<person><name>Peter</name><name>James</name></person>");
     defer f.deinit();
     try t.expectError(error.WrongCount, f.root().childOpt("name"));
     try f.expectDiag(.wrong_count, "/person: \"name\": expected at most one child element, found more than one");
 }
 
 test "no child when one child is expected" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<dog></dog>", &diag);
+    var f = try Fixture.init("<dog></dog>");
     defer f.deinit();
     try t.expectError(error.WrongCount, f.root().child("name"));
     try f.expectDiag(.wrong_count, "/dog: \"name\": expected exactly one child element, found none");
-    try t.expectEqual(f.root(), diag.elem.?);
+    try t.expectEqual(f.root(), f.doc.diagnostics().elem.?);
 }
 
 test "no attribute when one attribute is expected" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<city></city>", &diag);
+    var f = try Fixture.init("<city></city>");
     defer f.deinit();
     try t.expectError(error.WrongCount, f.root().attr([]const u8, "name"));
     try f.expectDiag(.wrong_count, "/city: \"name\": attribute is missing");
@@ -129,8 +121,7 @@ test "no attribute when one attribute is expected" {
 // ------------------------------------------------------------------ usage rules
 
 test "each attribute, child name and text can be used once" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<a x=\"1\"><b><c>t</c></b><b/></a>", &diag);
+    var f = try Fixture.init("<a x=\"1\"><b><c>t</c></b><b/></a>");
     defer f.deinit();
     const a = f.root();
 
@@ -149,8 +140,7 @@ test "each attribute, child name and text can be used once" {
 }
 
 test "requesting a missing name twice fails" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<a/>", &diag);
+    var f = try Fixture.init("<a/>");
     defer f.deinit();
     const a = f.root();
 
@@ -168,27 +158,24 @@ test "requesting a missing name twice fails" {
 }
 
 test "the name passed in may be a temporary buffer" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<a/>", &diag);
+    var f = try Fixture.init("<a/>");
     defer f.deinit();
     var name_buf = "zz".*;
     try t.expectError(error.WrongCount, f.root().attr([]const u8, &name_buf));
     name_buf = "qq".*;
-    try t.expectEqualStrings("zz", diag.selector.?);
+    try t.expectEqualStrings("zz", f.doc.diagnostics().selector.?);
     try t.expectError(error.AlreadyUsed, f.root().attr([]const u8, "zz"));
 }
 
 test "text of an element with child elements" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<a> <b/> </a>", &diag);
+    var f = try Fixture.init("<a> <b/> </a>");
     defer f.deinit();
     try t.expectError(error.WrongCount, f.root().text([]const u8));
     try f.expectDiag(.wrong_count, "/a: element has child elements, so it has no text");
 }
 
 test "text keeps whitespace and empty elements have empty text" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<a><b> x </b><c/><d></d></a>", &diag);
+    var f = try Fixture.init("<a><b> x </b><c/><d></d></a>");
     defer f.deinit();
     try t.expectEqualStrings(" x ", try (try f.root().child("b")).text([]const u8));
     try t.expectEqualStrings("", try (try f.root().child("c")).text([]const u8));
@@ -196,8 +183,7 @@ test "text keeps whitespace and empty elements have empty text" {
 }
 
 test "ignoreAll" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<a x=\"1\"><b/></a>", &diag);
+    var f = try Fixture.init("<a x=\"1\"><b/></a>");
     defer f.deinit();
     f.root().ignoreAll();
     try t.expectError(error.AlreadyUsed, f.root().attr([]const u8, "x"));
@@ -206,8 +192,7 @@ test "ignoreAll" {
 }
 
 test "visited elements" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<a><b/><b/><c/><d/></a>", &diag);
+    var f = try Fixture.init("<a><b/><b/><c/><d/></a>");
     defer f.deinit();
     const a = f.root();
     try t.expect(a.visited);
@@ -243,8 +228,7 @@ fn splitWords(gpa: std.mem.Allocator, s: []const u8) error{OutOfMemory}![][]cons
 }
 
 test "custom parsers" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<a c=\"red\" d=\"blue\" w=\"x y\"><b>green</b></a>", &diag);
+    var f = try Fixture.init("<a c=\"red\" d=\"blue\" w=\"x y\"><b>green</b></a>");
     defer f.deinit();
     const a = f.root();
 
@@ -261,8 +245,7 @@ test "custom parsers" {
 }
 
 test "custom parser for text with allocation" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<a>one two three</a>", &diag);
+    var f = try Fixture.init("<a>one two three</a>");
     defer f.deinit();
     const words = try f.root().textAllocWith(t.allocator, splitWords);
     defer t.allocator.free(words);
@@ -284,8 +267,7 @@ const Point = struct {
 };
 
 test "parseXml hook" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<a p=\"1,2\" q=\"3\"/>", &diag);
+    var f = try Fixture.init("<a p=\"1,2\" q=\"3\"/>");
     defer f.deinit();
     try t.expectEqual(Point{ .x = 1, .y = 2 }, try f.root().attr(Point, "p"));
     // Errors of hooks are reported as InvalidValue, with the original error name as message.
@@ -294,9 +276,8 @@ test "parseXml hook" {
 }
 
 test "...Alloc variants copy strings" {
-    var diag: Diagnostics = .{};
     const input = "<a x=\"plain\"><b>text</b></a>";
-    var f = try Fixture.init(input, &diag);
+    var f = try Fixture.init(input);
     const x = try f.root().attrAlloc(t.allocator, []const u8, "x");
     defer t.allocator.free(x);
     const y = try f.root().attrOptAlloc(t.allocator, []const u8, "y");
@@ -309,12 +290,11 @@ test "...Alloc variants copy strings" {
 }
 
 test "...Alloc variants report out of memory" {
-    var diag: Diagnostics = .{};
-    var f = try Fixture.init("<a x=\"plain\"/>", &diag);
+    var f = try Fixture.init("<a x=\"plain\"/>");
     defer f.deinit();
     var failing: std.testing.FailingAllocator = .init(t.allocator, .{ .fail_index = 0 });
     try t.expectError(error.OutOfMemory, f.root().attrAlloc(failing.allocator(), []const u8, "x"));
-    try t.expectEqual(Diagnostics.Kind.none, diag.kind);
+    try t.expectEqual(Diagnostics.Kind.none, f.doc.diagnostics().kind);
     try t.expectError(error.AlreadyUsed, f.root().attr([]const u8, "x"));
 }
 
@@ -323,10 +303,9 @@ test "...Alloc variants report out of memory" {
 const Timestamp = @import("Timestamp.zig");
 
 test "built-in value types" {
-    var diag: Diagnostics = .{};
     var f = try Fixture.init(
         \\<v i="-42" u="007" f="+1.25" b="true" e="green" ts="2021-05-31T23:12:04.5Z">3.5</v>
-    , &diag);
+    );
     defer f.deinit();
     const v = f.root();
     try t.expectEqual(@as(i32, -42), try v.attr(i32, "i"));
@@ -339,10 +318,9 @@ test "built-in value types" {
 }
 
 test "built-in value types report invalid values" {
-    var diag: Diagnostics = .{};
     var f = try Fixture.init(
         \\<v i="300" f="1e3" b="True" e="blue" ts="2021-02-29T00:00:00Z">x</v>
-    , &diag);
+    );
     defer f.deinit();
     const v = f.root();
 

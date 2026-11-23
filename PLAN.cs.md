@@ -27,7 +27,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
   a `xmlns:*` se přeskakují. Dva sourozenecké elementy (nebo dva atributy jednoho elementu) se
   stejným lokálním jménem a různými prefixy jsou chyba.
 - API pro extrakci: `attr`, `child`, `children`, `text` a jejich varianty (`Opt`, `With`, `Alloc`),
-  `ignoreAll`; podrobné informace o chybách v `Diagnostics`.
+  `ignoreAll`; podrobné informace o chybách v `doc.diagnostics()` / `ParseDiagnostics`.
 - Hlášení nepoužitých dat po extrakci (`Document.unused()`, `Document.expectAllUsed()`).
 - Parsery hodnot: řetězce, celá čísla, floaty, `bool`, enumy, `Timestamp` (UTC) a uživatelské typy.
 
@@ -54,7 +54,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 | 2026-11-23 | `text*` na elementu s podelementy selže s `error.WrongCount`. |
 | 2026-11-23 | Varianty jsou samostatné funkce (`attr`, `attrWith`, `attrAlloc`, …), ne struktura s volbami. |
 | 2026-11-23 | Vyžádaná jména, která neexistují, se pamatují (druhé vyžádání selže s `AlreadyUsed`); vyhledávání podle jména proto může vrátit `OutOfMemory`. |
-| 2026-11-23 | `Diagnostics` dál ukazuje do dokumentu; kdo parsuje, musí chyby nahlásit před `doc.deinit()` (žádné kopírování do vlastních bufferů). |
+| 2026-11-23 | Chyby extrakce si zaznamenává dokument (`doc.diagnostics()`), takže je zřejmé, že po `doc.deinit()` neplatí; kdo parsuje, nahlásí je předtím. Syntaktické chyby XML jdou do samostatné `ParseDiagnostics` (bez ukazatelů) předané v `Options`. |
 | 2026-11-23 | Používá se pouze větev `master`. |
 
 ## Milníky

@@ -27,7 +27,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
   `xmlns:*` attributes are skipped. Two sibling elements (or two attributes of one element) with
   the same local name but different prefixes are an error.
 - Extraction API: `attr`, `child`, `children`, `text` and their variants (`Opt`, `With`, `Alloc`),
-  `ignoreAll`; detailed error information in `Diagnostics`.
+  `ignoreAll`; detailed error information in `doc.diagnostics()` / `ParseDiagnostics`.
 - Reporting unused data after extraction (`Document.unused()`, `Document.expectAllUsed()`).
 - Value parsers: strings, integers, floats, `bool`, enums, `Timestamp` (UTC) and user types.
 
@@ -54,7 +54,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 | 2026-11-23 | `text*` on an element with child elements fails with `error.WrongCount`. |
 | 2026-11-23 | Variants are separate functions (`attr`, `attrWith`, `attrAlloc`, …), not an options struct. |
 | 2026-11-23 | Requested names that don't exist are remembered (a second request fails with `AlreadyUsed`); lookups by name may therefore return `OutOfMemory`. |
-| 2026-11-23 | `Diagnostics` keeps pointing into the document; whoever parses must report errors before `doc.deinit()` (no copying into own buffers). |
+| 2026-11-23 | Extraction errors are recorded by the document (`doc.diagnostics()`), so it is obvious they are invalid after `doc.deinit()`; whoever parses reports them before that. XML syntax errors go to a separate `ParseDiagnostics` (no pointers) passed in `Options`. |
 | 2026-11-23 | Only the `master` branch is used. |
 
 ## Milestones

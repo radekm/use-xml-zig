@@ -22,7 +22,7 @@ come from Zig:
 | `children "a" (fun e -> …)` returns `'T[]`        | `children("a")` returns `[]const *Elem` (a `for` loop)       |
 | `StringParser<'T>` closure                        | type `T` known at comptime, or a function `fn([]const u8) !T` |
 | `Dispose` + `ITracer` per element                 | `doc.unused()` / `doc.expectAllUsed()` after extraction      |
-| exceptions with data (`WrongCount`, `ParseError`) | Zig errors + a `Diagnostics` struct with the details         |
+| exceptions with data (`WrongCount`, `ParseError`) | Zig errors + `doc.diagnostics()` / `ParseDiagnostics` with the details |
 | GC                                                | borrowed values, or `...Alloc` variants with the caller's allocator |
 
 ## Example
@@ -39,12 +39,14 @@ const Person = struct {
 };
 
 fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
-    var diag: xml.Diagnostics = .{};
-    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &diag }) catch |err| {
-        std.log.err("{f}", .{diag});
+    var parse_diag: xml.ParseDiagnostics = .{};
+    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+        std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
         return err;
     };
     defer doc.deinit();
+    // Runs before `doc.deinit()`, while the diagnostics are still valid.
+    errdefer std.log.err("{f}", .{doc.diagnostics()});
 
     const root = doc.root(); // <people>
     const persons = try root.children("person");
@@ -61,7 +63,7 @@ fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
     }
 
     // Fails with error.UnusedData if something in the input was not used;
-    // `diag` then describes the first unused item.
+    // `doc.diagnostics()` then describes the first unused item.
     try doc.expectAllUsed();
     return result;
 }
@@ -74,8 +76,8 @@ fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
 ```zig
 pub const Document = struct {
     pub const Options = struct {
-        /// Filled in when `parse` or any extraction function fails.
-        diagnostics: ?*Diagnostics = null,
+        /// Filled in when `parse` fails with error.InvalidXml.
+        diagnostics: ?*ParseDiagnostics = null,
         /// Maximum element nesting depth. Deeper input fails with error.InvalidXml.
         max_depth: u32 = 256,
     };
@@ -88,9 +90,13 @@ pub const Document = struct {
     /// The root element.
     pub fn root(doc: *Document) *Elem;
 
+    /// Details about the last error of an extraction function or of `expectAllUsed`.
+    /// Valid only until `deinit`.
+    pub fn diagnostics(doc: *const Document) Diagnostics;
+
     /// Iterates over elements that have unused content (see "Unused data").
     pub fn unused(doc: *Document) UnusedIterator;
-    /// Returns error.UnusedData (and fills `diagnostics`) if anything was not used.
+    /// Returns error.UnusedData if anything was not used; `diagnostics()` describes it.
     pub fn expectAllUsed(doc: *Document) error{UnusedData}!void;
 };
 
@@ -183,10 +189,10 @@ pub const Error = error{
 ```
 
 Custom parsers (`...With`) may return any error (or no error at all). The error is passed through
-unchanged and is recorded in `Diagnostics` (the message is the error name).
+unchanged and is recorded in `doc.diagnostics()` (the message is the error name).
 Errors of `parseXml` / `parseXmlAlloc` hooks are returned as `error.InvalidValue` (except
 `error.OutOfMemory`), so that `attr(T, …)` always has the error set `Error`. The original error
-name is the message in `Diagnostics`.
+name is the message in `doc.diagnostics()`.
 
 ## Usage rules
 
@@ -228,7 +234,7 @@ while (it.next()) |u| std.log.warn("unused: {f}", .{u});
   whitespace between child elements.
 - `xmlns` / `xmlns:*` attributes are never reported.
 - `doc.expectAllUsed()` is a shortcut that fails with `error.UnusedData` on the first entry and
-  describes it in `Diagnostics`.
+  describes it in `doc.diagnostics()`.
 - Neither function allocates nor changes anything, so they can be called repeatedly; the result
   always reflects the current state.
 
@@ -294,46 +300,60 @@ Accepted format (like UseData.Xml's `dateTimeOffset`):
 `YYYY-MM-DDTHH:MM:SS[.f…]Z`, where `T` may also be a single space and the fraction has 1–9
 digits. The date and time are validated (month lengths, leap years). Years are 0000–9999.
 
-## `Diagnostics`
+## `ParseDiagnostics` and `Diagnostics`
 
 ```zig
+/// Errors of `Document.parse`. Doesn't point anywhere, so it is valid forever.
+pub const ParseDiagnostics = struct {
+    message: []const u8 = "", // static string; empty = no error
+    line: u32 = 0, // 1-based
+    column: u32 = 0, // 1-based, in code points
+
+    /// Prints e.g. `invalid XML at line 2, column 4: end tag does not match start tag`.
+    pub fn format(d: ParseDiagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void;
+};
+
+/// Errors of extraction functions and of `expectAllUsed`, recorded by the document.
 pub const Diagnostics = struct {
     kind: Kind = .none,
-    /// Element where the error happened (null for XML syntax errors).
+    /// Element where the error happened.
     elem: ?*const Elem = null,
-    /// Attribute name, child name, or null (text / syntax error).
+    /// Attribute name, child name, or null (text).
     selector: ?[]const u8 = null,
-    /// The string that failed to parse (InvalidValue / custom parser errors).
+    /// The string that failed to parse, the unused value, or null.
     input: ?[]const u8 = null,
     /// Human-readable message (static string or error name).
     message: []const u8 = "",
-    /// 1-based position in the input for XML syntax errors.
-    line: u32 = 0,
-    column: u32 = 0,
 
-    pub const Kind = enum { none, invalid_xml, wrong_count, already_used, invalid_value, unused_data };
+    pub const Kind = enum { none, wrong_count, already_used, invalid_value, unused_data };
 
-    /// Prints e.g. `/company/address[0]: attribute "city": expected exactly one`.
+    /// Prints e.g. `/company/address[0]: "city": attribute is missing`.
     pub fn format(d: Diagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void;
 };
 ```
 
-Fields with slices point into the input or into the document, so they are valid until
-`doc.deinit()`. When `Document.parse` fails, only `kind`, `message`, `line` and `column` are set.
+Errors are described in two places:
 
-**Print (or otherwise process) `Diagnostics` before calling `doc.deinit()`.** After that,
-`elem`, `selector` and `input` point to freed memory. The code that parses the document is
-responsible for reporting the error. Typical pattern:
+- **XML syntax errors** go to a `ParseDiagnostics` passed in `Options.diagnostics` (when
+  `parse` fails, there is no document to store them in). It contains no pointers, so it stays
+  valid forever.
+- **Errors of extraction functions and of `expectAllUsed`** are recorded by the document itself;
+  `doc.diagnostics()` returns the last one. Its slices point into the input or into the document,
+  so it is valid only until `doc.deinit()`. Being part of the document makes this lifetime
+  obvious. `error.OutOfMemory` is not recorded.
+
+**Report extraction errors before calling `doc.deinit()`.** The code that parses the document is
+responsible for that. Typical pattern:
 
 ```zig
-var diag: xml.Diagnostics = .{};
-var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &diag }) catch |err| {
-    std.log.err("{s}: {f}", .{ @errorName(err), diag }); // only static data, fine
+var parse_diag: xml.ParseDiagnostics = .{};
+var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+    std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
     return err;
 };
 defer doc.deinit();
 // `errdefer` declared after `defer doc.deinit()` runs before it.
-errdefer std.log.err("{f}", .{diag});
+errdefer std.log.err("{f}", .{doc.diagnostics()});
 ```
 
 The example `examples/m7/m7.zig` shows the same with a writer passed in by the caller.
@@ -341,7 +361,7 @@ The example `examples/m7/m7.zig` shows the same with a writer passed in by the c
 ## Out of memory
 
 - `Document.parse`: on `error.OutOfMemory` everything allocated so far is freed and no document is
-  returned. `Diagnostics` is not filled in (the error itself says enough).
+  returned. `ParseDiagnostics` is not filled in (the error itself says enough).
 - Lookups by name (`attr*`, `child*`, `children`) can return `error.OutOfMemory` **only when the
   name doesn't exist in the element**: the name is then copied into the document's internal arena
   so that a second request can be detected. Existing names need no allocation.

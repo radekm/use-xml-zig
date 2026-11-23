@@ -41,14 +41,14 @@ const Person = struct {
 /// Reads `<people><person name="…" age="…"><email>…</email></person>…</people>`.
 /// The result is allocated in `arena`.
 fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
-    var diag: xml.Diagnostics = .{};
-    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &diag }) catch |err| {
-        std.log.err("{s}: {f}", .{ @errorName(err), diag });
+    var parse_diag: xml.ParseDiagnostics = .{};
+    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+        std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
         return err;
     };
     defer doc.deinit();
-    // Runs before `doc.deinit()`, while `diag` is still valid.
-    errdefer std.log.err("{f}", .{diag});
+    // Runs before `doc.deinit()`, while the diagnostics are still valid.
+    errdefer std.log.err("{f}", .{doc.diagnostics()});
 
     const persons = try doc.root().children("person");
     const result = try arena.alloc(Person, persons.len);
@@ -172,12 +172,15 @@ Obvyklý postup je parsovat ve funkci, potřebná data zkopírovat do vlastních
 
 ## Chyby
 
-Chyby v Zigu nemohou nést data, proto se podrobnosti ukládají do `xml.Diagnostics`, předané v
-`Document.Options.diagnostics`:
+Chyby v Zigu nemohou nést data, proto se podrobnosti ukládají zvlášť:
+
+- Syntaktické chyby XML (`error.InvalidXml` z `Document.parse`) jdou do `xml.ParseDiagnostics`,
+  předané v `Document.Options.diagnostics`, např.
+  `invalid XML at line 2, column 4: end tag does not match start tag`.
+- Všechny ostatní chyby si zaznamenává dokument; `doc.diagnostics()` vrátí tu poslední:
 
 | Chyba             | `Diagnostics.kind` | Příklad `"{f}"` |
 |-------------------|--------------------|-----------------|
-| `InvalidXml`      | `invalid_xml`      | `invalid XML at line 2, column 4: end tag does not match start tag` |
 | `WrongCount`      | `wrong_count`      | `/person: "name": expected exactly one child element, found none` |
 | `AlreadyUsed`     | `already_used`     | `/a: "x": attribute was already used` |
 | `InvalidValue`    | `invalid_value`    | `/server: "port": expected integer (u16) (input: "80x")` |
@@ -185,9 +188,9 @@ Chyby v Zigu nemohou nést data, proto se podrobnosti ukládají do `xml.Diagnos
 | `UnusedData`      | `unused_data`      | `/config/server[0]: "tls": attribute was not used (input: "true")` |
 | `OutOfMemory`     | nevyplňuje se      | |
 
-**`Diagnostics` ukazuje do dokumentu. Chybu nahlaste před `doc.deinit()`.**
+**`doc.diagnostics()` ukazuje do dokumentu, proto chybu nahlaste před `doc.deinit()`.**
 Když po `defer doc.deinit()` následuje `errdefer …` (jako v rychlém startu), proběhne `errdefer`
-dřív, takže tam je diagnostika ještě platná.
+dřív, takže tam je diagnostika ještě platná. `ParseDiagnostics` toto omezení nemá.
 
 ## Nepoužitá data
 
@@ -222,7 +225,7 @@ Data, která záměrně nepotřebujete, buď vyžádejte a výsledek zahoďte
 nahlíželo do podelementů.
 
 `doc.expectAllUsed()` je zkratka: selže s `error.UnusedData` a první nepoužitou položku popíše
-v `Diagnostics`.
+v `doc.diagnostics()`.
 
 ## Podporované XML
 
@@ -243,7 +246,7 @@ přizpůsobené Zigu:
 - Místo callbacků (`child "a" (fun e -> …)`) vrací `child("a")` přímo element.
 - Nepoužitá data se kontrolují jednou po extrakci (`doc.unused()`, `doc.expectAllUsed()`), ne při
   uvolnění každého elementu.
-- Místo výjimek jsou chyby Zigu a `Diagnostics`.
+- Místo výjimek jsou chyby Zigu a `doc.diagnostics()` / `ParseDiagnostics`.
 - `text` na elementu s podelementy je chyba, ne `""`.
 - `decimal` není podporován; čísla s desetinnou částí se parsují jako floaty.
 

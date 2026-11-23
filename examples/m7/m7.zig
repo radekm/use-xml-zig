@@ -32,22 +32,28 @@ pub const OrderBookDelta = struct {
 /// Fails with `error.UnusedData` if the message contains data this function doesn't read.
 ///
 /// On error, a description is written to `err_out` (if given). It must be written here:
-/// `Diagnostics` points into the document, so it can't be used after `doc.deinit()`.
+/// `doc.diagnostics()` points into the document, so it can't be used after `doc.deinit()`.
 pub fn parseOrderBookDelta(
     gpa: Allocator,
     out: Allocator,
     input: []const u8,
     err_out: ?*std.Io.Writer,
 ) ![]OrderBookDelta {
-    var diag: xml.Diagnostics = .{};
-    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &diag }) catch |err| {
-        report(err_out, err, diag);
+    var parse_diag: xml.ParseDiagnostics = .{};
+    var doc = xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
+        if (err_out) |w| {
+            if (err == error.InvalidXml) {
+                w.print("{s}: {f}", .{ @errorName(err), parse_diag }) catch {};
+            } else {
+                w.print("{s}", .{@errorName(err)}) catch {};
+            }
+        }
         return err;
     };
     defer doc.deinit();
-    // Report errors while the document (which `diag` points into) is still alive.
+    // Report errors while the document is still alive.
     return extract(&doc, out) catch |err| {
-        report(err_out, err, diag);
+        report(err_out, err, doc.diagnostics());
         return err;
     };
 }

@@ -33,7 +33,7 @@ visited: bool = false,
 /// Names that were requested but don't exist in this element.
 missing: ?*Missing = null,
 
-/// Errors of the extraction functions. Details are in `Document.Options.diagnostics`.
+/// Errors of the extraction functions. Details are in `Document.diagnostics()`.
 pub const Error = error{
     /// Missing attribute/child, too many children, or text of an element with children.
     WrongCount,
@@ -247,9 +247,7 @@ fn OptWithResult(comptime parser: anytype) type {
 }
 
 fn report(e: *Elem, kind: Diagnostics.Kind, selector: ?[]const u8, input: ?[]const u8, message: []const u8) void {
-    if (e.ctx.diagnostics) |d| {
-        d.* = .{ .kind = kind, .elem = e, .selector = selector, .input = input, .message = message };
-    }
+    e.ctx.diag = .{ .kind = kind, .elem = e, .selector = selector, .input = input, .message = message };
 }
 
 /// Records that `wanted` (which doesn't exist) was requested. Returns the stored copy of `wanted`.
