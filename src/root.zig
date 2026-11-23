@@ -14,4 +14,5 @@ test {
     _ = @import("chars.zig");
     _ = @import("parser.zig");
     _ = @import("parser_test.zig");
+    _ = @import("elem_test.zig");
 }

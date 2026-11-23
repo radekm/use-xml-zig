@@ -63,7 +63,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 - [x] **M2 — XML parser:** tokenizer + stavba stromu (iterativně, bez rekurze na úroveň zanoření),
       řádek/sloupec v diagnostice chyb, testy well-formedness (včetně nevalidních vstupů z testů
       UseData.Xml).
-- [ ] **M3 — API elementu:** vyhledávání, sledování použití (každý atribut / jméno podelementu / text
+- [x] **M3 — API elementu:** vyhledávání, sledování použití (každý atribut / jméno podelementu / text
       lze použít jednou), chyby `WrongCount` / `AlreadyUsed`, cesta k elementu v `Diagnostics`.
 - [ ] **M4 — Parsery hodnot:** řetězce, celá čísla, floaty, bool, enumy, hook `parseXml`, `Timestamp`.
 - [ ] **M5 — Hlášení nepoužitých dat:** `Document.unused()`, `Document.expectAllUsed()`, `ignoreAll`.

@@ -63,7 +63,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 - [x] **M2 — XML parser:** tokenizer + tree builder (iterative, no recursion per nesting level),
       line/column in error diagnostics, well-formedness tests (incl. invalid inputs from
       UseData.Xml tests).
-- [ ] **M3 — Element API:** lookups, usage tracking (each attribute / child name / text may be used
+- [x] **M3 — Element API:** lookups, usage tracking (each attribute / child name / text may be used
       once), `WrongCount` / `AlreadyUsed` errors, element path in `Diagnostics`.
 - [ ] **M4 — Value parsers:** strings, ints, floats, bool, enums, `parseXml` hook, `Timestamp`.
 - [ ] **M5 — Unused reporting:** `Document.unused()`, `Document.expectAllUsed()`, `ignoreAll`.

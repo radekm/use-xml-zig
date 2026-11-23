@@ -45,6 +45,7 @@ pub fn parse(gpa: Allocator, input: []const u8, options: Options) ParseError!Doc
     if (options.diagnostics) |d| d.* = .{};
 
     ctx.root = try parser.parse(ctx, options.max_depth);
+    ctx.root.visited = true;
     return .{ .ctx = ctx };
 }
 
