@@ -258,9 +258,13 @@ pub fn parseXml(s: []const u8) !@This();                         // used by attr
 pub fn parseXmlAlloc(gpa: Allocator, s: []const u8) !@This();    // used by ...Alloc
 ```
 
-Modul `xml.parse` obsahuje vestavěné parsery jako obyčejné funkce, takže je lze kombinovat ve vlastních
-parserech (`xml.parse.int(u32, s)`, `xml.parse.float(f64, s)`, `xml.parse.timestamp(s)`,
-`xml.parse.oneOf(&.{ "a", "b" })` …).
+Hook má přednost před vestavěným parsováním (enum s `parseXml` se tedy neparsuje podle jména tagu).
+
+Modul `xml.parse` obsahuje vestavěné parsery jako obyčejné funkce vracející
+`error{InvalidValue}!T`, takže je lze kombinovat ve vlastních parserech:
+`xml.parse.int(u32, s)`, `xml.parse.float(f64, s)`, `xml.parse.boolean(s)`,
+`xml.parse.enumTag(E, s)`, `xml.parse.timestamp(s)` a `xml.parse.oneOf(&.{ "a", "b" })`
+(vrací parser pro `attrWith` / `textWith`).
 
 ### `Timestamp`
 
@@ -272,7 +276,9 @@ pub const Timestamp = struct {
 };
 ```
 
-Přijímaný formát (návrh, jako `dateTimeOffset` v UseData.Xml):
+`Timestamp` má také `parse(s)` a `format` (tiskne stejný formát, takže `"{f}"` dá zpět původní řetězec).
+
+Přijímaný formát (jako `dateTimeOffset` v UseData.Xml):
 `YYYY-MM-DDTHH:MM:SS[.f…]Z`, kde `T` může být i jedna mezera a desetinná část má 1–9 číslic.
 Datum i čas se validují (délky měsíců, přestupné roky). Roky jsou 0000–9999.
 

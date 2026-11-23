@@ -2,6 +2,8 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const builtin_parsers = @import("parse.zig");
+const Timestamp = @import("Timestamp.zig");
 
 /// Reasons a value can't be produced, before the error is reported in `Diagnostics`.
 pub const Failure = union(enum) {
@@ -21,15 +23,39 @@ pub fn parse(comptime T: type, gpa: ?Allocator, s: []const u8, failure: *Failure
         };
     }
 
+    if (T == Timestamp) {
+        return builtin(Timestamp.parse(s), "expected timestamp YYYY-MM-DDTHH:MM:SS[.fraction]Z", failure);
+    }
+
     switch (@typeInfo(T)) {
         .optional => @compileError("optional types are not supported; use the `Opt` variants"),
+        .int => return builtin(builtin_parsers.int(T, s), "expected integer (" ++ @typeName(T) ++ ")", failure),
+        .float => return builtin(builtin_parsers.float(T, s), "expected decimal number", failure),
+        .bool => return builtin(builtin_parsers.boolean(s), "expected 'true' or 'false'", failure),
         .@"struct", .@"enum", .@"union" => if (@hasDecl(T, "parseXml") or @hasDecl(T, "parseXmlAlloc")) {
             return parseWithHook(T, gpa, s, failure);
+        } else if (@typeInfo(T) == .@"enum") {
+            return builtin(builtin_parsers.enumTag(T, s), comptime enumMessage(T), failure);
         },
         else => {},
     }
     @compileError("unsupported type " ++ @typeName(T) ++
         "; add `pub fn parseXml([]const u8) !" ++ @typeName(T) ++ "` or use a custom parser");
+}
+
+fn builtin(result: anytype, comptime message: []const u8, failure: *Failure) error{Failed}!@typeInfo(@TypeOf(result)).error_union.payload {
+    return result catch {
+        failure.* = .{ .invalid = message };
+        return error.Failed;
+    };
+}
+
+fn enumMessage(comptime E: type) []const u8 {
+    var message: []const u8 = "expected one of:";
+    for (std.meta.fieldNames(E), 0..) |name, i| {
+        message = message ++ (if (i == 0) " " else ", ") ++ name;
+    }
+    return message;
 }
 
 fn parseWithHook(comptime T: type, gpa: ?Allocator, s: []const u8, failure: *Failure) error{Failed}!T {

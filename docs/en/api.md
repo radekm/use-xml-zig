@@ -259,9 +259,14 @@ pub fn parseXml(s: []const u8) !@This();                         // used by attr
 pub fn parseXmlAlloc(gpa: Allocator, s: []const u8) !@This();    // used by ...Alloc
 ```
 
-The module `xml.parse` contains the built-in parsers as plain functions, so they can be combined
-in custom parsers (`xml.parse.int(u32, s)`, `xml.parse.float(f64, s)`, `xml.parse.timestamp(s)`,
-`xml.parse.oneOf(&.{ "a", "b" })` …).
+A hook takes precedence over the built-in parsing (so an enum with `parseXml` is not parsed by tag
+name).
+
+The module `xml.parse` contains the built-in parsers as plain functions returning
+`error{InvalidValue}!T`, so they can be combined in custom parsers:
+`xml.parse.int(u32, s)`, `xml.parse.float(f64, s)`, `xml.parse.boolean(s)`,
+`xml.parse.enumTag(E, s)`, `xml.parse.timestamp(s)` and `xml.parse.oneOf(&.{ "a", "b" })`
+(returns a parser for `attrWith` / `textWith`).
 
 ### `Timestamp`
 
@@ -273,7 +278,9 @@ pub const Timestamp = struct {
 };
 ```
 
-Accepted format (proposal, like UseData.Xml's `dateTimeOffset`):
+`Timestamp` also has `parse(s)` and `format` (prints the same format, so `"{f}"` round-trips).
+
+Accepted format (like UseData.Xml's `dateTimeOffset`):
 `YYYY-MM-DDTHH:MM:SS[.f…]Z`, where `T` may also be a single space and the fraction has 1–9
 digits. The date and time are validated (month lengths, leap years). Years are 0000–9999.
 

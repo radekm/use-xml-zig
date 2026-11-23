@@ -317,3 +317,45 @@ test "...Alloc variants report out of memory" {
     try t.expectEqual(Diagnostics.Kind.none, diag.kind);
     try t.expectError(error.AlreadyUsed, f.root().attr([]const u8, "x"));
 }
+
+// ------------------------------------------------------------------ built-in value types
+
+const Timestamp = @import("Timestamp.zig");
+
+test "built-in value types" {
+    var diag: Diagnostics = .{};
+    var f = try Fixture.init(
+        \\<v i="-42" u="007" f="+1.25" b="true" e="green" ts="2021-05-31T23:12:04.5Z">3.5</v>
+    , &diag);
+    defer f.deinit();
+    const v = f.root();
+    try t.expectEqual(@as(i32, -42), try v.attr(i32, "i"));
+    try t.expectEqual(@as(u8, 7), try v.attr(u8, "u"));
+    try t.expectEqual(@as(f64, 1.25), try v.attr(f64, "f"));
+    try t.expectEqual(true, try v.attr(bool, "b"));
+    try t.expectEqual(Color.green, try v.attr(Color, "e"));
+    try t.expectEqual(Timestamp{ .seconds = 1622502724, .nanos = 500_000_000 }, try v.attr(Timestamp, "ts"));
+    try t.expectEqual(@as(f32, 3.5), try v.text(f32));
+}
+
+test "built-in value types report invalid values" {
+    var diag: Diagnostics = .{};
+    var f = try Fixture.init(
+        \\<v i="300" f="1e3" b="True" e="blue" ts="2021-02-29T00:00:00Z">x</v>
+    , &diag);
+    defer f.deinit();
+    const v = f.root();
+
+    try t.expectError(error.InvalidValue, v.attr(u8, "i"));
+    try f.expectDiag(.invalid_value, "/v: \"i\": expected integer (u8) (input: \"300\")");
+    try t.expectError(error.InvalidValue, v.attr(f64, "f"));
+    try f.expectDiag(.invalid_value, "/v: \"f\": expected decimal number (input: \"1e3\")");
+    try t.expectError(error.InvalidValue, v.attr(bool, "b"));
+    try f.expectDiag(.invalid_value, "/v: \"b\": expected 'true' or 'false' (input: \"True\")");
+    try t.expectError(error.InvalidValue, v.attr(Color, "e"));
+    try f.expectDiag(.invalid_value, "/v: \"e\": expected one of: red, green (input: \"blue\")");
+    try t.expectError(error.InvalidValue, v.attr(Timestamp, "ts"));
+    try f.expectDiag(.invalid_value, "/v: \"ts\": expected timestamp YYYY-MM-DDTHH:MM:SS[.fraction]Z (input: \"2021-02-29T00:00:00Z\")");
+    try t.expectError(error.InvalidValue, v.text(i64));
+    try f.expectDiag(.invalid_value, "/v: expected integer (i64) (input: \"x\")");
+}
