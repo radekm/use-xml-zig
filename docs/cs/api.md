@@ -242,8 +242,8 @@ zprávou v `Options.diagnostics`.
 
 1. Každé **jméno atributu**, každé **jméno podelementu** i **text** elementu lze vyžádat
    **nejvýše jednou**. Druhé vyžádání selže s `error.AlreadyUsed`. Platí to i pro jména, která
-   neexistují (`attrOpt("x")` dvakrát je chyba). Taková jména si
-   dokument pamatuje; odhalí se tak kód, který zpracovává stejnou věc dvakrát. Brání to dvojímu zpracování a odpovídá to UseData.Xml.
+   neexistují (`attrOpt("x")` dvakrát je chyba): taková jména si dokument pamatuje. Odhalí se tak
+   kód, který zpracovává stejnou věc dvakrát, a odpovídá to UseData.Xml.
 2. `child`, `childOpt` a `children` označí za použitou **celou skupinu** podelementů s tím jménem.
    Každý vrácený element je pak *navštívený*: jeho vlastní obsah kontroluje hlášení nepoužitých dat.
 3. Ptát se na jméno, které neexistuje, je v pořádku (`attrOpt`, `childOpt`, `children` vrátí

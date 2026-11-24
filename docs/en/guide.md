@@ -33,9 +33,9 @@ const Allocator = std.mem.Allocator;
 const use_xml = @import("use_xml");
 
 const Person = struct {
-    name: []const u8, // owned by `gpa`
+    name: []const u8, // owned by `arena`
     age: u8,
-    email: ?[]const u8, // owned by `gpa`
+    email: ?[]const u8, // owned by `arena`
 };
 
 /// Reads `<people><person name="…" age="…"><email>…</email></person>…</people>`.
@@ -219,7 +219,7 @@ the library is recorded there; it holds only the last one:
 | custom parser's  | `invalid_value`    | `/a: "d": UnknownColor (input: "blue")` |
 | `UnusedData`     | `unused_data`      | `/config/server[0]: "tls": attribute was not used (input: "true")` |
 | `OutOfMemory`    | `value_out_of_memory` | `/a: "x": out of memory while producing the value` |
-| `OutOfMemory`    | `document_out_of_memory` | `/a: document out of memory` |
+| `OutOfMemory`    | `document_out_of_memory` | `/a: "x": document out of memory` |
 
 `value_out_of_memory` means that producing the value ran out of memory (the allocator passed to
 `...Alloc`, or your parser); `document_out_of_memory` means that the document's own memory ran out.
@@ -295,5 +295,6 @@ adapted to Zig:
 
 - [api.md](api.md): API reference and design decisions.
 - [examples/m7/m7.zig](../../examples/m7/m7.zig): a real-world example (port of UseData.Xml's
-  benchmark), which also shows reporting errors through a writer.
+  benchmark), which also shows a function that takes `?*Diagnostics` from its caller, and how the
+  caller reports the error.
 - `zig build bench`: benchmark.

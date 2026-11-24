@@ -242,9 +242,8 @@ name is the message in `Options.diagnostics`.
 
 1. Each **attribute name**, each **child name** and the **text** of an element can be requested
    **at most once**. A second request fails with `error.AlreadyUsed`. This also holds for names
-   that don't exist (`attrOpt("x")` twice is an error). Such names are
-   remembered in the document; this catches code that processes the same thing twice. This prevents double processing and
-   matches UseData.Xml.
+   that don't exist (`attrOpt("x")` twice is an error): such names are remembered in the document.
+   This catches code that processes the same thing twice and matches UseData.Xml.
 2. `child`, `childOpt` and `children` mark the **whole group** of children with that name as used.
    Each returned element is then *visited*: its own content is checked by the unused report.
 3. Asking for a name that is not present is fine (`attrOpt`, `childOpt`, `children` return

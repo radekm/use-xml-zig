@@ -9,9 +9,9 @@ const t = std.testing;
 // ------------------------------------------------------------------ Quick start
 
 const Person = struct {
-    name: []const u8, // owned by `gpa`
+    name: []const u8, // owned by `arena`
     age: u8,
-    email: ?[]const u8, // owned by `gpa`
+    email: ?[]const u8, // owned by `arena`
 };
 
 /// Reads `<people><person name="…" age="…"><email>…</email></person>…</people>`.

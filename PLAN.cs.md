@@ -51,16 +51,17 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 | 2026-11-23 | Ve v1 žádné comptime mapování na struktury. |
 | 2026-11-23 | Paměť: arena dokumentu nikdy neopustí knihovnu. Hodnoty bez alokátoru jsou vypůjčené (platí, dokud žije dokument a vstup). Varianty `...Alloc` kopírují / alokují alokátorem volajícího; vlastní parsery, které alokují, dostanou alokátor volajícího. |
 | 2026-11-23 | Celá čísla: volitelné `+` / `-`, úvodní nuly povoleny. Floaty: jen běžný desetinný zápis (bez exponentu, `inf`, `nan`). `bool`: `true` / `false`, záleží na velikosti písmen. `Timestamp`: jen přípona `Z`. |
-| 2026-11-23 | `text*` na elementu s podelementy selže s `error.WrongCount`. |
+| 2026-11-23 | `text*` na elementu s podelementy selže s `error.WrongCount` (teď `error.HasChildren`, viz 2026-11-24). |
 | 2026-11-23 | Varianty jsou samostatné funkce (`attr`, `attrWith`, `attrAlloc`, …), ne struktura s volbami. |
 | 2026-11-23 | Vyžádaná jména, která neexistují, se pamatují (druhé vyžádání selže s `AlreadyUsed`); vyhledávání podle jména proto může vrátit `OutOfMemory`. |
-| 2026-11-23 | Chyby extrakce si zaznamenává dokument (`doc.diagnostics()`), takže je zřejmé, že po `doc.deinit()` neplatí; kdo parsuje, nahlásí je předtím. Syntaktické chyby XML jdou do samostatné `ParseDiagnostics` (bez ukazatelů) předané v `Options`. |
+| 2026-11-23 | Chyby extrakce si zaznamenává dokument (`doc.diagnostics()`), takže je zřejmé, že po `doc.deinit()` neplatí; kdo parsuje, nahlásí je předtím. Syntaktické chyby XML jdou do samostatné `ParseDiagnostics` (bez ukazatelů) předané v `Options`. (Nahrazeno 2026-11-24.) |
 | 2026-11-23 | Licence: zlib. |
 | 2026-11-24 | Diagnostika se předává v `Options.diagnostics` a popis kopíruje do bufferu od volajícího (`Diagnostics.init(&buf)`), takže platí i po `doc.deinit()`. Jeden typ `Diagnostics` pro syntaktické i extrakční chyby (`ParseDiagnostics` a `doc.diagnostics()` jsou zrušené); dlouhá jména/hodnoty se zkracují, popis, který se nevejde, se ořízne (`truncated`). Nahrazuje rozhodnutí z 2026-11-23 o diagnostice uložené v dokumentu. |
-| 2026-11-24 | `doc.diagnostics()` zaznamenává i `error.OutOfMemory`, takže popisuje každou chybu, kterou extrakční funkce vrátí. Druh `document_out_of_memory` = interní paměť dokumentu, `value_out_of_memory` = vytváření hodnoty (alokátor `...Alloc`, vlastní parser, `parseXmlAlloc`). |
+| 2026-11-24 | `Diagnostics` zaznamenává i `error.OutOfMemory`, takže popisuje každou chybu, kterou extrakční funkce vrátí. Druh `document_out_of_memory` = interní paměť dokumentu, `value_out_of_memory` = vytváření hodnoty (alokátor `...Alloc`, vlastní parser, `parseXmlAlloc`). |
 | 2026-11-24 | `error.WrongCount` je rozdělená na `Missing`, `TooMany` a `HasChildren`. Každá extrakční funkce vrací jen chyby, které můžou nastat (`ChildError`, `AttrError`, …); `use_xml.Error` je jejich sjednocení. |
 | 2026-11-24 | Vlastní parser ve funkcích `...With` je funkce, nebo hodnota (či ukazatel) s metodou `parse`; hodnota nese stav známý za běhu. Žádné zvláštní funkce s kontextem. |
 | 2026-11-24 | Funkce `...Alloc` používají jen hook `parseXmlAlloc`; typ jen s `parseXml` s nimi použít nejde (chyba překladu), takže vlastněný výsledek si nikdy nepůjčuje z dokumentu. |
+| 2026-11-24 | Po review: vlastní parser smí být i ukazatel na funkci; hook `parseXml` / `parseXmlAlloc` smí vracet hodnotu bez chyby. Diagnostika zkracuje dlouhé cesty k elementům od začátku (`/…/b[0]`), neplatné UTF-8 v předaných jménech nahrazuje znakem U+FFFD a `"{f}"` vypíše druh chyby, když se do bufferu nevejde nic z popisu. |
 | 2026-11-23 | Používá se pouze větev `master`. |
 
 ## Milníky

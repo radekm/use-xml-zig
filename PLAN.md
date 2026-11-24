@@ -51,16 +51,17 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 | 2026-11-23 | No comptime struct mapping in v1. |
 | 2026-11-23 | Memory: the document's arena never leaves the library. Values without an allocator are borrowed (valid while the document and the input live). `...Alloc` variants copy / allocate with the caller's allocator; custom parsers that allocate get the caller's allocator. |
 | 2026-11-23 | Integers: optional `+` / `-`, leading zeros allowed. Floats: plain decimal form only (no exponent, `inf`, `nan`). `bool`: `true` / `false`, case-sensitive. `Timestamp`: `Z` suffix only. |
-| 2026-11-23 | `text*` on an element with child elements fails with `error.WrongCount`. |
+| 2026-11-23 | `text*` on an element with child elements fails with `error.WrongCount` (now `error.HasChildren`, see 2026-11-24). |
 | 2026-11-23 | Variants are separate functions (`attr`, `attrWith`, `attrAlloc`, …), not an options struct. |
 | 2026-11-23 | Requested names that don't exist are remembered (a second request fails with `AlreadyUsed`); lookups by name may therefore return `OutOfMemory`. |
-| 2026-11-23 | Extraction errors are recorded by the document (`doc.diagnostics()`), so it is obvious they are invalid after `doc.deinit()`; whoever parses reports them before that. XML syntax errors go to a separate `ParseDiagnostics` (no pointers) passed in `Options`. |
+| 2026-11-23 | Extraction errors are recorded by the document (`doc.diagnostics()`), so it is obvious they are invalid after `doc.deinit()`; whoever parses reports them before that. XML syntax errors go to a separate `ParseDiagnostics` (no pointers) passed in `Options`. (Replaced on 2026-11-24.) |
 | 2026-11-23 | License: zlib. |
 | 2026-11-24 | Diagnostics are passed in `Options.diagnostics` and copy the description into a buffer from the caller (`Diagnostics.init(&buf)`), so they stay valid after `doc.deinit()`. One `Diagnostics` type for syntax and extraction errors (`ParseDiagnostics` and `doc.diagnostics()` are removed); long names/values are shortened, a description that doesn't fit is cut (`truncated`). Replaces the decision of 2026-11-23 about diagnostics stored in the document. |
-| 2026-11-24 | `doc.diagnostics()` also records `error.OutOfMemory`, so it describes every error returned by the extraction functions. Kind `document_out_of_memory` = the document's internal memory, `value_out_of_memory` = producing the value (allocator of `...Alloc`, custom parser, `parseXmlAlloc`). |
+| 2026-11-24 | `Diagnostics` also record `error.OutOfMemory`, so it describes every error returned by the extraction functions. Kind `document_out_of_memory` = the document's internal memory, `value_out_of_memory` = producing the value (allocator of `...Alloc`, custom parser, `parseXmlAlloc`). |
 | 2026-11-24 | `error.WrongCount` is split into `Missing`, `TooMany` and `HasChildren`. Every extraction function returns only the errors that can happen (`ChildError`, `AttrError`, …); `use_xml.Error` is the union of all. |
 | 2026-11-24 | A custom parser in `...With` functions is a function or a value (or pointer) with a method `parse`; the value carries run-time state. No separate context functions. |
 | 2026-11-24 | `...Alloc` functions use only the `parseXmlAlloc` hook; a type with only `parseXml` can't be used with them (compile error), so an owned result never borrows the document. |
+| 2026-11-24 | After the review: a custom parser may also be a pointer to a function; a `parseXml` / `parseXmlAlloc` hook may return a value without an error. Diagnostics shorten long element paths from the start (`/…/b[0]`), replace invalid UTF-8 in names passed in by U+FFFD, and `"{f}"` prints the kind when nothing of the description fits into the buffer. |
 | 2026-11-23 | Only the `master` branch is used. |
 
 ## Milestones

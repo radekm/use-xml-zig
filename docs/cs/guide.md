@@ -33,9 +33,9 @@ const Allocator = std.mem.Allocator;
 const use_xml = @import("use_xml");
 
 const Person = struct {
-    name: []const u8, // owned by `gpa`
+    name: []const u8, // owned by `arena`
     age: u8,
-    email: ?[]const u8, // owned by `gpa`
+    email: ?[]const u8, // owned by `arena`
 };
 
 /// Reads `<people><person name="…" age="…"><email>…</email></person>…</people>`.
@@ -218,7 +218,7 @@ tam každá chyba knihovny; drží se jen ta poslední:
 | z vlastního parseru | `invalid_value`  | `/a: "d": UnknownColor (input: "blue")` |
 | `UnusedData`      | `unused_data`      | `/config/server[0]: "tls": attribute was not used (input: "true")` |
 | `OutOfMemory`     | `value_out_of_memory` | `/a: "x": out of memory while producing the value` |
-| `OutOfMemory`     | `document_out_of_memory` | `/a: document out of memory` |
+| `OutOfMemory`     | `document_out_of_memory` | `/a: "x": document out of memory` |
 
 `value_out_of_memory` znamená, že paměť došla při vytváření hodnoty (alokátor předaný do
 `...Alloc` nebo váš parser); `document_out_of_memory` znamená, že došla vlastní paměť dokumentu.
@@ -294,5 +294,6 @@ přizpůsobené Zigu:
 
 - [api.md](api.md): popis API a rozhodnutí o návrhu.
 - [examples/m7/m7.zig](../../examples/m7/m7.zig): příklad z praxe (port benchmarku z UseData.Xml),
-  který ukazuje i hlášení chyb přes writer.
+  který ukazuje i funkci, která dostane `?*Diagnostics` od volajícího, a jak volající chybu
+  nahlásí.
 - `zig build bench`: benchmark.
