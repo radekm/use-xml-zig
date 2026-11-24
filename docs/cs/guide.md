@@ -149,6 +149,23 @@ const created = try img.attr(use_xml.Timestamp, "created");
 
 - `attrWith` / `textWith` berou libovolnou funkci `fn ([]const u8) E!R`. Její chyba se vrátí
   beze změny.
+- Parser, který potřebuje stav (např. hodnoty známé až za běhu), je hodnota s metodou
+  `pub fn parse(self, []const u8) E!R`; místo funkce se předá tato hodnota (nebo ukazatel na ni):
+
+  ```zig
+  const UnitParser = struct {
+      allowed: []const []const u8,
+
+      pub fn parse(u: UnitParser, s: []const u8) ![]const u8 {
+          for (u.allowed) |a| {
+              if (std.mem.eql(u8, a, s)) return s;
+          }
+          return error.UnknownUnit;
+      }
+  };
+
+  const unit = try img.attrWith("unit", UnitParser{ .allowed = allowed_units });
+  ```
 - Typ s `pub fn parseXml([]const u8) !T` lze použít přímo jako `T`. Chyby hooku se vrací jako
   `error.InvalidValue`. Aby šel typ použít s funkcemi `...Alloc`, potřebuje navíc
   `pub fn parseXmlAlloc(Allocator, []const u8) !T`, který nesmí vracet řezy svého vstupu.

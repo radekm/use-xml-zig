@@ -150,6 +150,23 @@ const created = try img.attr(use_xml.Timestamp, "created");
 
 - `attrWith` / `textWith` take any function `fn ([]const u8) E!R`. Its error is returned
   unchanged.
+- A parser that needs state (e.g. values known only at run time) is a value with a method
+  `pub fn parse(self, []const u8) E!R`; pass the value (or a pointer to it) instead of a function:
+
+  ```zig
+  const UnitParser = struct {
+      allowed: []const []const u8,
+
+      pub fn parse(u: UnitParser, s: []const u8) ![]const u8 {
+          for (u.allowed) |a| {
+              if (std.mem.eql(u8, a, s)) return s;
+          }
+          return error.UnknownUnit;
+      }
+  };
+
+  const unit = try img.attrWith("unit", UnitParser{ .allowed = allowed_units });
+  ```
 - A type with `pub fn parseXml([]const u8) !T` can be used directly as `T`. Errors of the hook are
   returned as `error.InvalidValue`. To use the type with `...Alloc` functions, it also needs
   `pub fn parseXmlAlloc(Allocator, []const u8) !T`, which must not return slices of its input.

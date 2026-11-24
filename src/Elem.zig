@@ -153,14 +153,15 @@ pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) AttrOptError!?
     return try e.convert(T, null, a.value, a.local_name);
 }
 
-/// Value of attribute `attr_name` parsed by `parser: fn ([]const u8) E!R`.
-pub fn attrWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) WithResult(AttrLookupError, parser) {
+/// Value of attribute `attr_name` parsed by `parser`: a function `fn ([]const u8) E!R`, or a value
+/// with a method `parse(self, []const u8) E!R` (use it for parsers that need state).
+pub fn attrWith(e: *Elem, attr_name: []const u8, parser: anytype) WithResult(AttrLookupError, @TypeOf(parser)) {
     const a = try e.requiredAttr(attr_name);
     return e.callParser(parser, .{a.value}, a.local_name, a.value);
 }
 
 /// Like `attrWith`, but returns null if the attribute is missing.
-pub fn attrOptWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) OptWithResult(AttrOptLookupError, parser) {
+pub fn attrOptWith(e: *Elem, attr_name: []const u8, parser: anytype) OptWithResult(AttrOptLookupError, @TypeOf(parser)) {
     const a = (try e.optionalAttr(attr_name)) orelse return null;
     return try e.callParser(parser, .{a.value}, a.local_name, a.value);
 }
@@ -177,14 +178,15 @@ pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []con
     return try e.convert(T, gpa, a.value, a.local_name);
 }
 
-/// Value of attribute `attr_name` parsed by `parser: fn (Allocator, []const u8) E!R`, which gets `gpa`.
-pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) WithResult(AttrLookupError, parser) {
+/// Value of attribute `attr_name` parsed by `parser`, which gets `gpa`: a function
+/// `fn (Allocator, []const u8) E!R`, or a value with a method `parse(self, Allocator, []const u8) E!R`.
+pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, parser: anytype) WithResult(AttrLookupError, @TypeOf(parser)) {
     const a = try e.requiredAttr(attr_name);
     return e.callParser(parser, .{ gpa, a.value }, a.local_name, a.value);
 }
 
 /// Like `attrAllocWith`, but returns null if the attribute is missing.
-pub fn attrOptAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) OptWithResult(AttrOptLookupError, parser) {
+pub fn attrOptAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, parser: anytype) OptWithResult(AttrOptLookupError, @TypeOf(parser)) {
     const a = (try e.optionalAttr(attr_name)) orelse return null;
     return try e.callParser(parser, .{ gpa, a.value }, a.local_name, a.value);
 }
@@ -236,8 +238,8 @@ pub fn text(e: *Elem, comptime T: type) TextError!T {
     return e.convert(T, null, e.text_content, null);
 }
 
-/// Text of the element parsed by `parser: fn ([]const u8) E!R`.
-pub fn textWith(e: *Elem, comptime parser: anytype) WithResult(TextLookupError, parser) {
+/// Text of the element parsed by `parser` (a function or a value with `parse`, see `attrWith`).
+pub fn textWith(e: *Elem, parser: anytype) WithResult(TextLookupError, @TypeOf(parser)) {
     try e.useText();
     return e.callParser(parser, .{e.text_content}, null, e.text_content);
 }
@@ -248,8 +250,8 @@ pub fn textAlloc(e: *Elem, gpa: Allocator, comptime T: type) TextError!T {
     return e.convert(T, gpa, e.text_content, null);
 }
 
-/// Text of the element parsed by `parser: fn (Allocator, []const u8) E!R`, which gets `gpa`.
-pub fn textAllocWith(e: *Elem, gpa: Allocator, comptime parser: anytype) WithResult(TextLookupError, parser) {
+/// Text of the element parsed by `parser`, which gets `gpa` (see `attrAllocWith`).
+pub fn textAllocWith(e: *Elem, gpa: Allocator, parser: anytype) WithResult(TextLookupError, @TypeOf(parser)) {
     try e.useText();
     return e.callParser(parser, .{ gpa, e.text_content }, null, e.text_content);
 }
@@ -267,13 +269,13 @@ pub fn ignoreAll(e: *Elem) void {
 // ------------------------------------------------------------------ internals
 
 /// Result of a `...With` function: errors of the lookup and of the custom parser.
-fn WithResult(comptime LookupError: type, comptime parser: anytype) type {
-    const r = value.ParserResult(parser);
+fn WithResult(comptime LookupError: type, comptime Parser: type) type {
+    const r = value.ParserResult(Parser);
     return (LookupError || r[0])!r[1];
 }
 
-fn OptWithResult(comptime LookupError: type, comptime parser: anytype) type {
-    const r = value.ParserResult(parser);
+fn OptWithResult(comptime LookupError: type, comptime Parser: type) type {
+    const r = value.ParserResult(Parser);
     return (LookupError || r[0])!?r[1];
 }
 
@@ -381,10 +383,10 @@ fn convert(e: *Elem, comptime T: type, gpa: anytype, s: []const u8, selector: ?[
     };
 }
 
-fn callParser(e: *Elem, comptime parser: anytype, args: anytype, selector: ?[]const u8, s: []const u8) WithResult(error{}, parser) {
-    const R = @typeInfo(@TypeOf(parser)).@"fn".return_type.?;
+fn callParser(e: *Elem, parser: anytype, args: anytype, selector: ?[]const u8, s: []const u8) WithResult(error{}, @TypeOf(parser)) {
+    const R = @typeInfo(value.ParseFn(@TypeOf(parser))).@"fn".return_type.?;
     if (@typeInfo(R) == .error_union) {
-        return @call(.auto, parser, args) catch |err| {
+        return value.callParser(parser, args) catch |err| {
             if (@as(anyerror, err) == error.OutOfMemory) {
                 // The parser can't use the document's memory, so it is the value's.
                 e.report(.value_out_of_memory, selector, null, value_oom_message);
@@ -394,7 +396,7 @@ fn callParser(e: *Elem, comptime parser: anytype, args: anytype, selector: ?[]co
             return err;
         };
     } else {
-        return @call(.auto, parser, args);
+        return value.callParser(parser, args);
     }
 }
 

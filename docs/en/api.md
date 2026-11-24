@@ -128,17 +128,17 @@ pub fn path(e: *const Elem) Path;
 pub fn attr(e: *Elem, comptime T: type, attr_name: []const u8) AttrError!T;
 pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) AttrOptError!?T;
 
-// Custom parser without allocation: `parser: fn ([]const u8) E!R`.
-pub fn attrWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) (AttrLookupError || E)!R;
-pub fn attrOptWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) (AttrOptLookupError || E)!?R;
+// Custom parser without allocation (see "Custom parsers" below).
+pub fn attrWith(e: *Elem, attr_name: []const u8, parser: anytype) (AttrLookupError || E)!R;
+pub fn attrOptWith(e: *Elem, attr_name: []const u8, parser: anytype) (AttrOptLookupError || E)!?R;
 
 // Result allocated with the caller's allocator (strings are copied).
 pub fn attrAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) AttrError!T;
 pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) AttrOptError!?T;
 
-// Custom parser that allocates: `parser: fn (Allocator, []const u8) E!R`, gets `gpa`.
-pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) (AttrLookupError || E)!R;
-pub fn attrOptAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) (AttrOptLookupError || E)!?R;
+// Custom parser that allocates and gets `gpa` (see "Custom parsers" below).
+pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, parser: anytype) (AttrLookupError || E)!R;
+pub fn attrOptAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, parser: anytype) (AttrOptLookupError || E)!?R;
 ```
 
 - `attr*` fails with `error.Missing` if the attribute is missing.
@@ -161,9 +161,9 @@ pub fn children(e: *Elem, child_name: []const u8) ChildrenError![]const *Elem; /
 
 ```zig
 pub fn text(e: *Elem, comptime T: type) TextError!T;
-pub fn textWith(e: *Elem, comptime parser: anytype) (TextLookupError || E)!R;
+pub fn textWith(e: *Elem, parser: anytype) (TextLookupError || E)!R;
 pub fn textAlloc(e: *Elem, gpa: Allocator, comptime T: type) TextError!T;
-pub fn textAllocWith(e: *Elem, gpa: Allocator, comptime parser: anytype) (TextLookupError || E)!R;
+pub fn textAllocWith(e: *Elem, gpa: Allocator, parser: anytype) (TextLookupError || E)!R;
 ```
 
 Text is the concatenation of all text and CDATA sections directly inside the element. Comments
@@ -205,6 +205,27 @@ pub const ValueError = error{ InvalidValue, OutOfMemory };                      
 pub const AttrError = AttrLookupError || ValueError;                            // attr, attrAlloc
 pub const AttrOptError = AttrOptLookupError || ValueError;                      // attrOpt, attrOptAlloc
 pub const TextError = TextLookupError || ValueError;                            // text, textAlloc
+```
+
+#### Custom parsers
+
+`parser` in the `...With` functions is either a **function** or a **value with a method `parse`**.
+A value can carry state known only at run time (allowed values from a configuration, a lookup
+table, a counter, …). It can also be a pointer, e.g. when `parse` changes the state.
+
+| Functions             | Function                         | Value with a method                            |
+|-----------------------|----------------------------------|------------------------------------------------|
+| `attrWith`, `attrOptWith`, `textWith` | `fn ([]const u8) E!R` | `pub fn parse(self, []const u8) E!R`  |
+| `attrAllocWith`, `attrOptAllocWith`, `textAllocWith` | `fn (Allocator, []const u8) E!R` | `pub fn parse(self, Allocator, []const u8) E!R` |
+
+```zig
+const opacity = try img.attrWith("opacity", parsePercent); // a function
+
+const UnitParser = struct {
+    allowed: []const []const u8,
+    pub fn parse(u: UnitParser, s: []const u8) error{UnknownUnit}![]const u8 { … }
+};
+const unit = try img.attrWith("unit", UnitParser{ .allowed = config.units }); // a value
 ```
 
 Custom parsers (`...With`) may return any error (or no error at all). The error is passed through

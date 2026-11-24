@@ -252,6 +252,54 @@ test "custom parser for text with allocation" {
     try t.expectEqual(3, words.len);
 }
 
+/// A parser with state: accepts only the units given at run time.
+const UnitParser = struct {
+    allowed: []const []const u8,
+
+    pub fn parse(u: UnitParser, s: []const u8) error{UnknownUnit}![]const u8 {
+        for (u.allowed) |a| {
+            if (std.mem.eql(u8, a, s)) return s;
+        }
+        return error.UnknownUnit;
+    }
+};
+
+/// A parser with mutable state, passed by pointer: counts the values and copies them.
+const CountingCopier = struct {
+    count: usize = 0,
+
+    pub fn parse(c: *CountingCopier, gpa: std.mem.Allocator, s: []const u8) error{OutOfMemory}![]u8 {
+        c.count += 1;
+        return gpa.dupe(u8, s);
+    }
+};
+
+test "custom parsers with state" {
+    var f = try Fixture.init("<a u=\"px\" v=\"pt\" w=\"x\"><b>em</b><c>y</c></a>");
+    defer f.deinit();
+    const a = f.root();
+
+    var allowed: std.ArrayList([]const u8) = .empty; // known only at run time
+    defer allowed.deinit(t.allocator);
+    try allowed.appendSlice(t.allocator, &.{ "px", "em" });
+    const units: UnitParser = .{ .allowed = allowed.items };
+
+    try t.expectEqualStrings("px", try a.attrWith("u", units));
+    try t.expectError(error.UnknownUnit, a.attrWith("v", units));
+    try f.expectDiag(.invalid_value, "/a: \"v\": UnknownUnit (input: \"pt\")");
+    try t.expectEqual(null, try a.attrOptWith("missing", units));
+    try t.expectEqualStrings("em", try (try a.child("b")).textWith(&units)); // a pointer works too
+
+    var copier: CountingCopier = .{};
+    const w = try a.attrAllocWith(t.allocator, "w", &copier);
+    defer t.allocator.free(w);
+    const y = try (try a.child("c")).textAllocWith(t.allocator, &copier);
+    defer t.allocator.free(y);
+    try t.expectEqualStrings("x", w);
+    try t.expectEqualStrings("y", y);
+    try t.expectEqual(2, copier.count);
+}
+
 /// A user type with a `parseXml` hook.
 const Point = struct {
     x: i32,

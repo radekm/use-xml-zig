@@ -224,6 +224,24 @@ fn pOom(s: []const u8) error{OutOfMemory}!usize {
     return s.len;
 }
 
+/// A parser with state (a value with a method `parse`).
+const MaxLen = struct {
+    max: usize,
+    pub fn parse(m: MaxLen, s: []const u8) error{TooLong}!usize {
+        if (s.len > m.max) return error.TooLong;
+        return s.len;
+    }
+};
+
+/// A parser with mutable state, passed by pointer.
+const AllocCounter = struct {
+    count: usize = 0,
+    pub fn parse(c: *AllocCounter, gpa: Allocator, s: []const u8) error{OutOfMemory}![]u8 {
+        c.count += 1;
+        return gpa.dupe(u8, s);
+    }
+};
+
 const UseKey = struct { elem: *Elem, kind: u8, name: []const u8 };
 
 const Ex = struct {
@@ -299,7 +317,7 @@ const Ex = struct {
     }
 
     fn attrOp(x: *Ex, e: *Elem, n: []const u8) !void {
-        const op = x.r.uintLessThan(u32, 20);
+        const op = x.r.uintLessThan(u32, 23);
         var err: ?anyerror = null;
         switch (op) {
             0 => _ = e.attr([]const u8, n) catch |er| {
@@ -370,6 +388,22 @@ const Ex = struct {
             },
             19 => _ = e.attrOpt(u64, n) catch |er| {
                 err = er;
+            },
+            20 => _ = e.attrWith(n, MaxLen{ .max = x.r.uintLessThan(usize, 4) }) catch |er| {
+                err = er;
+            },
+            21 => {
+                const max: MaxLen = .{ .max = 3 };
+                _ = e.attrOptWith(n, &max) catch |er| {
+                    err = er;
+                };
+            },
+            22 => {
+                const a = x.allocator();
+                var counter: AllocCounter = .{};
+                if (e.attrOptAllocWith(a, n, &counter)) |s| {
+                    if (s) |v| a.free(v);
+                } else |er| err = er;
             },
             else => unreachable,
         }

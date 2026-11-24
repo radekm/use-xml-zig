@@ -58,6 +58,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 | 2026-11-23 | Licence: zlib. |
 | 2026-11-24 | `doc.diagnostics()` zaznamenává i `error.OutOfMemory`, takže popisuje každou chybu, kterou extrakční funkce vrátí. Druh `document_out_of_memory` = interní paměť dokumentu, `value_out_of_memory` = vytváření hodnoty (alokátor `...Alloc`, vlastní parser, `parseXmlAlloc`). |
 | 2026-11-24 | `error.WrongCount` je rozdělená na `Missing`, `TooMany` a `HasChildren`. Každá extrakční funkce vrací jen chyby, které můžou nastat (`ChildError`, `AttrError`, …); `use_xml.Error` je jejich sjednocení. |
+| 2026-11-24 | Vlastní parser ve funkcích `...With` je funkce, nebo hodnota (či ukazatel) s metodou `parse`; hodnota nese stav známý za běhu. Žádné zvláštní funkce s kontextem. |
 | 2026-11-24 | Funkce `...Alloc` používají jen hook `parseXmlAlloc`; typ jen s `parseXml` s nimi použít nejde (chyba překladu), takže vlastněný výsledek si nikdy nepůjčuje z dokumentu. |
 | 2026-11-23 | Používá se pouze větev `master`. |
 

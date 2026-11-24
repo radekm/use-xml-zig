@@ -101,6 +101,28 @@ test "values" {
     try doc.expectAllUsed();
 }
 
+/// A custom parser with state: a value with a method `parse`.
+const UnitParser = struct {
+    allowed: []const []const u8,
+
+    pub fn parse(u: UnitParser, s: []const u8) ![]const u8 {
+        for (u.allowed) |a| {
+            if (std.mem.eql(u8, a, s)) return s;
+        }
+        return error.UnknownUnit;
+    }
+};
+
+test "parser with state" {
+    var doc = try use_xml.Document.parse(t.allocator, "<image unit=\"px\"/>", .{});
+    defer doc.deinit();
+    const img = doc.root();
+    const allowed_units: []const []const u8 = &.{ "px", "em" }; // e.g. from a configuration
+
+    const unit = try img.attrWith("unit", UnitParser{ .allowed = allowed_units });
+    try t.expectEqualStrings("px", unit);
+}
+
 // ------------------------------------------------------------------ Unused data
 
 test "unused data" {
