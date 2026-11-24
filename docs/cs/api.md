@@ -330,7 +330,8 @@ pub fn parseXml(s: []const u8) !@This();                         // used by attr
 pub fn parseXmlAlloc(gpa: Allocator, s: []const u8) !@This();    // used by ...Alloc
 ```
 
-Hook má přednost před vestavěným parsováním (enum s `parseXml` se tedy neparsuje podle jména tagu).
+Hook, který nemůže selhat, smí vracet i `@This()` bez chyby. Hook má přednost před vestavěným
+parsováním (enum s `parseXml` se tedy neparsuje podle jména tagu).
 
 Funkce `...Alloc` používají jen `parseXmlAlloc`. Typ s hookem, ale bez `parseXmlAlloc` s nimi
 použít nejde (chyba překladu), protože `parseXml` může vracet řezy svého vstupu, které by

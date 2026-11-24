@@ -375,6 +375,27 @@ const Name = struct {
     }
 };
 
+/// Hooks that can't fail.
+const Length = struct {
+    n: usize,
+
+    pub fn parseXml(s: []const u8) Length {
+        return .{ .n = s.len };
+    }
+    pub fn parseXmlAlloc(_: std.mem.Allocator, s: []const u8) Length {
+        return .{ .n = s.len };
+    }
+};
+
+test "hooks without an error" {
+    var f = try Fixture.init("<a x=\"12\" y=\"345\"><b>6789</b></a>");
+    defer f.deinit();
+    const a = f.root();
+    try t.expectEqual(2, (try a.attr(Length, "x")).n);
+    try t.expectEqual(3, (try a.attrOptAlloc(t.allocator, Length, "y")).?.n);
+    try t.expectEqual(4, (try (try a.child("b")).text(Length)).n);
+}
+
 test "...Alloc variants use parseXmlAlloc" {
     // `a&amp;b` is decoded into the document's memory, so a borrowed value would dangle.
     var f = try Fixture.init("<a x=\"a&amp;b\" y=\"c\"><b>d&amp;e</b></a>");

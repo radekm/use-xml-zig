@@ -79,6 +79,8 @@ fn parseWithHook(comptime T: type, gpa: anytype, s: []const u8, failure: *Failur
         T.parseXml(s)
     else
         @compileError(@typeName(T) ++ " has only `parseXmlAlloc`; use an `...Alloc` function");
+    // A hook may also return `T` without an error.
+    if (@typeInfo(@TypeOf(result)) != .error_union) return result;
     return result catch |err| {
         failure.* = if (@as(anyerror, err) == error.OutOfMemory) .out_of_memory else .{ .invalid = @errorName(err) };
         return error.Failed;

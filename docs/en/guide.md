@@ -176,8 +176,9 @@ const created = try img.attr(use_xml.Timestamp, "created");
   const unit = try img.attrWith("unit", UnitParser{ .allowed = allowed_units });
   ```
 - A type with `pub fn parseXml([]const u8) !T` can be used directly as `T`. Errors of the hook are
-  returned as `error.InvalidValue`. To use the type with `...Alloc` functions, it also needs
-  `pub fn parseXmlAlloc(Allocator, []const u8) !T`, which must not return slices of its input.
+  returned as `error.InvalidValue`; a hook that can't fail may return just `T`. To use the type
+  with `...Alloc` functions, it also needs `pub fn parseXmlAlloc(Allocator, []const u8) !T`, which
+  must not return slices of its input.
 - The built-in parsers are available as `use_xml.parse.int`, `float`, `boolean`, `enumTag`,
   `timestamp` and `oneOf`, so custom parsers can reuse them.
 

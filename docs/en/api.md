@@ -331,8 +331,8 @@ pub fn parseXml(s: []const u8) !@This();                         // used by attr
 pub fn parseXmlAlloc(gpa: Allocator, s: []const u8) !@This();    // used by ...Alloc
 ```
 
-A hook takes precedence over the built-in parsing (so an enum with `parseXml` is not parsed by tag
-name).
+A hook that can't fail may also return `@This()` without an error. A hook takes precedence over
+the built-in parsing (so an enum with `parseXml` is not parsed by tag name).
 
 `...Alloc` functions use only `parseXmlAlloc`. A type with a hook but without `parseXmlAlloc` can't
 be used with them (compile error), because `parseXml` may return slices of its input, which would
