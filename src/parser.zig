@@ -612,8 +612,11 @@ const Parser = struct {
                     i += 1;
                 },
                 '<' => {
-                    // Only possible in attribute values; text stops at '<'.
-                    return p.fail(offset + i, "'<' is not allowed in attribute values");
+                    // Text stops at '<', so only attribute values and CDATA get here.
+                    if (mode == .attr) return p.fail(offset + i, "'<' is not allowed in attribute values");
+                    out[j] = c;
+                    j += 1;
+                    i += 1;
                 },
                 '&' => {
                     if (mode == .cdata) {

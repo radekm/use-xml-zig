@@ -140,6 +140,13 @@ test "text: references, CDATA, comments, line endings" {
     try t.expect(doc.root().text_significant);
 }
 
+test "CDATA with a CR may contain '<' and '&'" {
+    const input = "<a><![CDATA[\r\n<b>&amp;\r]]></a>";
+    var doc = try Document.parse(t.allocator, input, .{});
+    defer doc.deinit();
+    try t.expectEqualStrings("\n<b>&amp;\n", doc.root().text_content);
+}
+
 test "whitespace" {
     const input = "<a>\n  <b>  </b>\n  <c><![CDATA[ ]]></c>\n  <d/>\n  <e></e>\n</a>";
     var doc = try Document.parse(t.allocator, input, .{});
