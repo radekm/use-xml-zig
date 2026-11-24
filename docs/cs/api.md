@@ -230,7 +230,8 @@ while (it.next()) |u| std.log.warn("unused: {f}", .{u});
 - Nepoužité podelementy se hlásí **jen jménem v rodiči**. Jejich obsah se nezkoumá, protože se na
   ně nikdo nedíval.
 - Text, který obsahuje jen bílé znaky a žádnou CDATA, se nikdy nehlásí. Totéž platí pro bílé znaky
-  mezi podelementy.
+  mezi podelementy. Počítají se jen bílé znaky zapsané přímo: znaková reference jako `&#32;` je
+  text (a mezi podelementy se odmítne jako smíšený obsah).
 - Atributy `xmlns` / `xmlns:*` se nikdy nehlásí.
 - `doc.expectAllUsed()` je zkratka, která selže s `error.UnusedData` u první položky a popíše ji
   v `doc.diagnostics()`.

@@ -593,7 +593,8 @@ const Parser = struct {
         }
 
         const f = p.top();
-        const whitespace = chars.isAllSpace(text);
+        // Only literal whitespace is ignorable; a character reference (`&#32;`) is text.
+        const whitespace = chars.isAllSpace(raw);
         if (f.groups.items.len > 0) {
             // Whitespace between child elements is ignored.
             if (!whitespace) {

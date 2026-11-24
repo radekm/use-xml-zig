@@ -231,7 +231,8 @@ while (it.next()) |u| std.log.warn("unused: {f}", .{u});
 - Unused child elements are reported **only by name in their parent**. Their content is not
   examined, because nobody looked at them.
 - Text that contains only whitespace and no CDATA is never reported. The same is true for
-  whitespace between child elements.
+  whitespace between child elements. Only literal whitespace counts: a character reference such
+  as `&#32;` is text (and between child elements it is rejected as mixed content).
 - `xmlns` / `xmlns:*` attributes are never reported.
 - `doc.expectAllUsed()` is a shortcut that fails with `error.UnusedData` on the first entry and
   describes it in `doc.diagnostics()`.

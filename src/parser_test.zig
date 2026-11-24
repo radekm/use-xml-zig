@@ -230,6 +230,16 @@ test "many attributes and many groups of children (hash map lookup)" {
     }
 }
 
+test "character references to whitespace are text" {
+    var doc = try Document.parse(t.allocator, "<a>&#32;&#x9;&#10;</a>", .{});
+    defer doc.deinit();
+    try t.expectEqualStrings(" \t\n", doc.root().text_content);
+    try t.expect(doc.root().text_significant);
+
+    try expectInvalid("<a>&#32;<b/></a>", "mixed content: element contains both text and child elements", 1, 9);
+    try expectInvalid("<a><b/>&#x20;</a>", "mixed content: element contains both text and child elements", 1, 8);
+}
+
 test "non-ASCII names" {
     var doc = try Document.parse(t.allocator, "<město název=\"Brno\"><ulice/></město>", .{});
     defer doc.deinit();
