@@ -339,7 +339,7 @@ pub const Diagnostics = struct {
     /// Human-readable message (static string or error name).
     message: []const u8 = "",
 
-    pub const Kind = enum { none, wrong_count, already_used, invalid_value, unused_data };
+    pub const Kind = enum { none, wrong_count, already_used, invalid_value, unused_data, out_of_memory };
 
     /// Prints e.g. `/company/address[0]: "city": attribute is missing`.
     pub fn format(d: Diagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void;
@@ -354,12 +354,14 @@ Chyby se popisují na dvou místech:
 - **Chyby extrakčních funkcí a `expectAllUsed`** si zaznamenává sám dokument; `doc.diagnostics()`
   vrátí tu poslední. Její slicy ukazují do vstupu nebo do dokumentu, takže platí jen do
   `doc.deinit()`. Protože je součástí dokumentu, je tato doba platnosti zřejmá.
-  `error.OutOfMemory` se nezaznamenává.
+  Zaznamenává se každá chyba, kterou tyto funkce vrátí, i `error.OutOfMemory` (druh
+  `out_of_memory`), takže po chybě knihovny ji `doc.diagnostics()` vždy popisuje.
 
-  Drží jen **poslední** chybu: každá zaznamenaná chyba ji přepíše a nic jiného ji nemění. Volání,
-  která uspějí, a volání, která selžou s `error.OutOfMemory`, v ní nechají předchozí chybu, proto
-  `doc.diagnostics()` čti hned po jiné chybě než `OutOfMemory` (v `catch` nebo `errdefer`).
-  `kind != .none` říká jen to, že *nějaké* dřívější volání selhalo.
+  Drží jen **poslední** chybu: každá chyba ji přepíše a nic jiného ji nemění. Volání, která
+  uspějí, v ní nechají předchozí chybu, proto `doc.diagnostics()` čti hned po chybě (v `catch`
+  nebo `errdefer`). `kind != .none` říká jen to, že *nějaké* dřívější volání selhalo. Chyby, které
+  nepochází z knihovny (např. z vlastních alokací mezi voláními), se pochopitelně nezaznamenají:
+  `errdefer`, který loguje `doc.diagnostics()`, pak vypíše starší chybu.
 
 **Chyby extrakce nahlas dřív, než zavoláš `doc.deinit()`.** Odpovídá za to kód, který dokument
 parsuje. Typický vzor:
@@ -389,6 +391,8 @@ Příklad `examples/m7/m7.zig` ukazuje totéž s writerem, který předá volaj�
 - Funkce `...Alloc` vrátí `error.OutOfMemory`, když selže alokátor volajícího. Nic neunikne: paměť
   alokovaná pro neúspěšnou hodnotu se před návratem uvolní. Hodnoty vrácené dřívějšími voláními
   patří volajícímu, který je uvolní jako obvykle (`errdefer`).
+- Každá chyba `error.OutOfMemory` extrakční funkce se zaznamená do `doc.diagnostics()` (druh
+  `out_of_memory`); zaznamenání nic nealokuje.
 - Hodnota se označí jako použitá ještě před parsováním. I když parsování selže (nevalidní hodnota,
   nedostatek paměti), druhé vyžádání stejného jména selže s `error.AlreadyUsed`.
 

@@ -327,8 +327,36 @@ test "...Alloc variants report out of memory" {
     defer f.deinit();
     var failing: std.testing.FailingAllocator = .init(t.allocator, .{ .fail_index = 0 });
     try t.expectError(error.OutOfMemory, f.root().attrAlloc(failing.allocator(), []const u8, "x"));
-    try t.expectEqual(Diagnostics.Kind.none, f.doc.diagnostics().kind);
+    try f.expectDiag(.out_of_memory, "/a: \"x\": out of memory");
     try t.expectError(error.AlreadyUsed, f.root().attr([]const u8, "x"));
+}
+
+test "out of memory is recorded in diagnostics" {
+    // A custom parser that runs out of memory.
+    {
+        var f = try Fixture.init("<a w=\"x y\"><b/></a>");
+        defer f.deinit();
+        _ = try f.root().child("b"); // diagnostics must not keep an older state
+        var failing: std.testing.FailingAllocator = .init(t.allocator, .{ .fail_index = 0 });
+        try t.expectError(error.OutOfMemory, f.root().attrAllocWith(failing.allocator(), "w", splitWords));
+        try f.expectDiag(.out_of_memory, "/a: \"w\": out of memory");
+    }
+    // Remembering a missing name in the document's arena fails.
+    {
+        var failing: std.testing.FailingAllocator = .init(t.allocator, .{});
+        var doc = try Document.parse(failing.allocator(), "<a/>", .{});
+        defer doc.deinit();
+        _ = doc.root().attr(u8, "x") catch {}; // an older error
+        failing.fail_index = failing.alloc_index; // fail from now on
+        // A name that doesn't fit into the arena's current buffer.
+        const long_name = try t.allocator.alloc(u8, 100_000);
+        defer t.allocator.free(long_name);
+        @memset(long_name, 'n');
+        try t.expectError(error.OutOfMemory, doc.root().attrOpt(u8, long_name));
+        try t.expectEqual(Diagnostics.Kind.out_of_memory, doc.diagnostics().kind);
+        var buf: [64]u8 = undefined;
+        try t.expectEqualStrings("/a: out of memory", try std.fmt.bufPrint(&buf, "{f}", .{doc.diagnostics()}));
+    }
 }
 
 // ------------------------------------------------------------------ built-in value types

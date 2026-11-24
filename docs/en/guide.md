@@ -191,7 +191,7 @@ Zig errors can't carry data, so the details are stored separately:
 | `InvalidValue`   | `invalid_value`    | `/server: "port": expected integer (u16) (input: "80x")` |
 | custom parser's  | `invalid_value`    | `/a: "d": UnknownColor (input: "blue")` |
 | `UnusedData`     | `unused_data`      | `/config/server[0]: "tls": attribute was not used (input: "true")` |
-| `OutOfMemory`    | not filled in      | |
+| `OutOfMemory`    | `out_of_memory`    | `/a: "x": out of memory` |
 
 **`doc.diagnostics()` points into the document, so report the error before `doc.deinit()`.**
 With `defer doc.deinit()` followed by `errdefer …` (as in the quick start) the `errdefer` runs first,

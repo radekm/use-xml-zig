@@ -4,10 +4,9 @@
 //!
 //! Slices point into the input or into the document, so a `Diagnostics` value is valid only
 //! until `Document.deinit`. Report the error before freeing the document.
-//! `error.OutOfMemory` is not recorded.
-//!
-//! It holds only the last error. Successful calls and `error.OutOfMemory` don't change it, so read
-//! it right after an error other than `OutOfMemory`.
+//! Every error returned by an extraction function or by `expectAllUsed` is recorded, including
+//! `error.OutOfMemory`. Only the last error is kept; successful calls don't change it, so read it
+//! right after an error.
 
 const std = @import("std");
 const Elem = @import("Elem.zig");
@@ -25,7 +24,7 @@ input: ?[]const u8 = null,
 message: []const u8 = "",
 
 /// What went wrong. `none` means no error was recorded.
-pub const Kind = enum { none, wrong_count, already_used, invalid_value, unused_data };
+pub const Kind = enum { none, wrong_count, already_used, invalid_value, unused_data, out_of_memory };
 
 /// Prints a one-line description, e.g. `/company/address[0]: "city": attribute is missing`.
 pub fn format(d: Diagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void {

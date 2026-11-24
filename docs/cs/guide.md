@@ -191,7 +191,7 @@ Chyby v Zigu nemohou nést data, proto se podrobnosti ukládají zvlášť:
 | `InvalidValue`    | `invalid_value`    | `/server: "port": expected integer (u16) (input: "80x")` |
 | z vlastního parseru | `invalid_value`  | `/a: "d": UnknownColor (input: "blue")` |
 | `UnusedData`      | `unused_data`      | `/config/server[0]: "tls": attribute was not used (input: "true")` |
-| `OutOfMemory`     | nevyplňuje se      | |
+| `OutOfMemory`     | `out_of_memory`    | `/a: "x": out of memory` |
 
 **`doc.diagnostics()` ukazuje do dokumentu, proto chybu nahlaste před `doc.deinit()`.**
 Když po `defer doc.deinit()` následuje `errdefer …` (jako v rychlém startu), proběhne `errdefer`

@@ -341,7 +341,7 @@ pub const Diagnostics = struct {
     /// Human-readable message (static string or error name).
     message: []const u8 = "",
 
-    pub const Kind = enum { none, wrong_count, already_used, invalid_value, unused_data };
+    pub const Kind = enum { none, wrong_count, already_used, invalid_value, unused_data, out_of_memory };
 
     /// Prints e.g. `/company/address[0]: "city": attribute is missing`.
     pub fn format(d: Diagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void;
@@ -356,12 +356,14 @@ Errors are described in two places:
 - **Errors of extraction functions and of `expectAllUsed`** are recorded by the document itself;
   `doc.diagnostics()` returns the last one. Its slices point into the input or into the document,
   so it is valid only until `doc.deinit()`. Being part of the document makes this lifetime
-  obvious. `error.OutOfMemory` is not recorded.
+  obvious. Every error these functions return is recorded, `error.OutOfMemory` too (kind
+  `out_of_memory`), so after an error of the library `doc.diagnostics()` always describes it.
 
-  It holds only the **last** error: every recorded error overwrites it, and nothing else changes
-  it. Calls that succeed and calls that fail with `error.OutOfMemory` leave the previous error in
-  place, so read `doc.diagnostics()` right after an error other than `OutOfMemory` (in `catch` or
-  `errdefer`). `kind != .none` only says that *some* earlier call failed.
+  It holds only the **last** error: every error overwrites it, and nothing else changes it. Calls
+  that succeed leave the previous error in place, so read `doc.diagnostics()` right after an error
+  (in `catch` or `errdefer`). `kind != .none` only says that *some* earlier call failed. Errors
+  that don't come from the library (e.g. from your own allocations between the calls) are not
+  recorded, of course: an `errdefer` that logs `doc.diagnostics()` then logs an older error.
 
 **Report extraction errors before calling `doc.deinit()`.** The code that parses the document is
 responsible for that. Typical pattern:
@@ -391,6 +393,8 @@ The example `examples/m7/m7.zig` shows the same with a writer passed in by the c
 - `...Alloc` functions return `error.OutOfMemory` when the caller's allocator fails. Nothing is
   leaked: memory allocated for the failed value is freed before returning. Values returned by
   earlier calls belong to the caller, who frees them as usual (`errdefer`).
+- Every `error.OutOfMemory` of an extraction function is recorded in `doc.diagnostics()` (kind
+  `out_of_memory`); recording it doesn't allocate.
 - The value is marked as used before parsing. So even when parsing fails (invalid value, out of
   memory) a second request for the same name fails with `error.AlreadyUsed`.
 

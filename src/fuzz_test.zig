@@ -264,7 +264,7 @@ const Ex = struct {
     fn check(x: *Ex, e: *Elem, kind: u8, n: []const u8, err: ?anyerror) !void {
         const before = x.wasUsed(e, kind, n);
         if (before) {
-            if (err == null or err.? != error.AlreadyUsed) {
+            if (err == null or err.? != error.AlreadyUsed or x.doc.diagnostics().kind != .already_used) {
                 std.debug.print("expected AlreadyUsed for kind {d} name '{s}' got {?}\n", .{ kind, n, err });
                 return error.TestUnexpectedResult;
             }
@@ -275,12 +275,10 @@ const Ex = struct {
                 std.debug.print("unexpected AlreadyUsed for kind {d} name '{s}'\n", .{ kind, n });
                 return error.TestUnexpectedResult;
             }
-            if (er == error.OutOfMemory) {
-                try x.used.append(x.gpa, .{ .elem = e, .kind = kind, .name = n });
-                return;
-            }
-            // Every other error must be recorded.
-            if (x.doc.diagnostics().kind == .none) return error.TestUnexpectedResult;
+            // Every error must be recorded (diagnostics are cleared before each call).
+            const recorded = x.doc.diagnostics().kind;
+            if (recorded == .none) return error.TestUnexpectedResult;
+            if ((er == error.OutOfMemory) != (recorded == .out_of_memory)) return error.TestUnexpectedResult;
             try x.fmt(x.doc.diagnostics());
         }
         // Names are compared by value; for kind 0/1 the lookup is by local name.
@@ -440,6 +438,8 @@ const Ex = struct {
         try x.elems.append(x.gpa, x.doc.root());
         var steps = x.r.uintLessThan(u32, 60);
         while (steps > 0) : (steps -= 1) {
+            // Internal: clear the diagnostics, so that `check` sees only what this call recorded.
+            x.doc.ctx.diag = .{};
             const e = x.elems.items[x.r.uintLessThan(usize, x.elems.items.len)];
             switch (x.r.uintLessThan(u32, 12)) {
                 0, 1, 2 => try x.attrOp(e, x.pickName(e, 0)),

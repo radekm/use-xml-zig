@@ -77,8 +77,8 @@ pub fn root(doc: *Document) *Elem {
 
 /// Details about the last error of an extraction function (`attr`, `child`, …) or of
 /// `expectAllUsed`. Valid only until `deinit`: report the error before freeing the document.
-/// Successful calls and `error.OutOfMemory` don't change it, so read it right after an error
-/// other than `OutOfMemory`.
+/// Every error of these functions is recorded (including `OutOfMemory`), successful calls don't
+/// change it, so read it right after an error.
 pub fn diagnostics(doc: *const Document) Diagnostics {
     return doc.ctx.diag;
 }
