@@ -128,16 +128,16 @@ pub fn path(e: *const Elem) Path;
 
 ```zig
 // Borrowed result (no allocation; strings point into the input or into the document).
-pub fn attr(e: *Elem, comptime T: type, attr_name: []const u8) AttrError!T;
-pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) AttrOptError!?T;
+pub fn attr(e: *Elem, comptime T: type, attr_name: []const u8) (AttrLookupError || V)!T;
+pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) (AttrOptLookupError || V)!?T;
 
 // Custom parser without allocation (see "Custom parsers" below).
 pub fn attrWith(e: *Elem, attr_name: []const u8, parser: anytype) (AttrLookupError || E)!R;
 pub fn attrOptWith(e: *Elem, attr_name: []const u8, parser: anytype) (AttrOptLookupError || E)!?R;
 
 // Result allocated with the caller's allocator (strings are copied).
-pub fn attrAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) AttrError!T;
-pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) AttrOptError!?T;
+pub fn attrAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) (AttrLookupError || V)!T;
+pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) (AttrOptLookupError || V)!?T;
 
 // Custom parser that allocates and gets `gpa` (see "Custom parsers" below).
 pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, parser: anytype) (AttrLookupError || E)!R;
@@ -163,9 +163,9 @@ pub fn children(e: *Elem, child_name: []const u8) ChildrenError![]const *Elem; /
 #### Text
 
 ```zig
-pub fn text(e: *Elem, comptime T: type) TextError!T;
+pub fn text(e: *Elem, comptime T: type) (TextLookupError || V)!T;
 pub fn textWith(e: *Elem, parser: anytype) (TextLookupError || E)!R;
-pub fn textAlloc(e: *Elem, gpa: Allocator, comptime T: type) TextError!T;
+pub fn textAlloc(e: *Elem, gpa: Allocator, comptime T: type) (TextLookupError || V)!T;
 pub fn textAllocWith(e: *Elem, gpa: Allocator, parser: anytype) (TextLookupError || E)!R;
 ```
 
@@ -204,11 +204,21 @@ pub const ChildrenError = error{ AlreadyUsed, OutOfMemory };                    
 pub const AttrLookupError = error{ Missing, AlreadyUsed, OutOfMemory };         // finding a required attribute
 pub const AttrOptLookupError = error{ AlreadyUsed, OutOfMemory };               // finding an optional attribute
 pub const TextLookupError = error{ HasChildren, AlreadyUsed };                  // finding the text
-pub const ValueError = error{ InvalidValue, OutOfMemory };                      // built-in value parsing
-pub const AttrError = AttrLookupError || ValueError;                            // attr, attrAlloc
-pub const AttrOptError = AttrOptLookupError || ValueError;                      // attrOpt, attrOptAlloc
-pub const TextError = TextLookupError || ValueError;                            // text, textAlloc
 ```
+
+`attr*`, `attrOpt*` and `text*` without `With` return the errors of the lookup plus `V`, the errors
+of parsing a value of type `T`. `V` contains only the errors that can happen for `T`:
+
+| `T`                                      | `V` (`attr`, `text`, …)   | `V` (`attrAlloc`, `textAlloc`, …) |
+|------------------------------------------|---------------------------|-----------------------------------|
+| `[]const u8`                             | none                      | `OutOfMemory`                     |
+| integers, floats, `bool`, enums, `Timestamp` | `InvalidValue`        | `InvalidValue`                    |
+| type with a hook                         | by the errors of `parseXml` | by the errors of `parseXmlAlloc` |
+
+A hook adds `InvalidValue` if it can fail with an error other than `OutOfMemory`, and `OutOfMemory`
+if it can fail with it. So `text([]const u8)` fails only with `HasChildren` or `AlreadyUsed`, and
+`text(u32)` never fails with `OutOfMemory`. `attr*` can always fail with `OutOfMemory`, because
+the document remembers requested names that don't exist.
 
 #### Custom parsers
 
@@ -235,8 +245,9 @@ const unit = try img.attrWith("unit", UnitParser{ .allowed = config.units }); //
 Custom parsers (`...With`) may return any error (or no error at all). The error is passed through
 unchanged and is recorded in `Options.diagnostics` (the message is the error name).
 Errors of `parseXml` / `parseXmlAlloc` hooks are returned as `error.InvalidValue` (except
-`error.OutOfMemory`), so that `attr(T, …)` always has the error set `AttrError`. The original error
-name is the message in `Options.diagnostics`.
+`error.OutOfMemory`), so that `attr(T, …)` returns only the errors of the library. The original
+error name is the message in `Options.diagnostics`. A hook must not be generic (its error set has
+to be known).
 
 ## Usage rules
 

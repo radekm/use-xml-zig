@@ -62,14 +62,7 @@ pub const AttrLookupError = error{ Missing, AlreadyUsed, OutOfMemory };
 pub const AttrOptLookupError = error{ AlreadyUsed, OutOfMemory };
 /// Errors of looking up the text (`text*`), before parsing the value.
 pub const TextLookupError = error{ HasChildren, AlreadyUsed };
-/// Errors of the built-in value parsing (`attr(T, …)`, `text(T)`, …).
-pub const ValueError = error{ InvalidValue, OutOfMemory };
-/// Errors of `attr` and `attrAlloc`.
-pub const AttrError = AttrLookupError || ValueError;
-/// Errors of `attrOpt` and `attrOptAlloc`.
-pub const AttrOptError = AttrOptLookupError || ValueError;
-/// Errors of `text` and `textAlloc`.
-pub const TextError = TextLookupError || ValueError;
+// `attr(T, …)`, `text(T)`, … add the errors of parsing a value of type `T`, see `value.ValueError`.
 
 /// Internal: a requested name that doesn't exist in the element.
 pub const Missing = struct {
@@ -142,13 +135,13 @@ pub const Path = struct {
 
 /// Value of attribute `attr_name` parsed as `T`. Fails with `error.Missing` if the attribute is missing.
 /// Strings are borrowed (valid while the document and the input live).
-pub fn attr(e: *Elem, comptime T: type, attr_name: []const u8) AttrError!T {
+pub fn attr(e: *Elem, comptime T: type, attr_name: []const u8) (AttrLookupError || value.ValueError(T, false))!T {
     const a = try e.requiredAttr(attr_name);
     return e.convert(T, null, a.value, a.local_name);
 }
 
 /// Like `attr`, but returns null if the attribute is missing.
-pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) AttrOptError!?T {
+pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) (AttrOptLookupError || value.ValueError(T, false))!?T {
     const a = (try e.optionalAttr(attr_name)) orelse return null;
     return try e.convert(T, null, a.value, a.local_name);
 }
@@ -168,13 +161,13 @@ pub fn attrOptWith(e: *Elem, attr_name: []const u8, parser: anytype) OptWithResu
 }
 
 /// Like `attr`, but the result is allocated with `gpa` (strings are copied).
-pub fn attrAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) AttrError!T {
+pub fn attrAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) (AttrLookupError || value.ValueError(T, true))!T {
     const a = try e.requiredAttr(attr_name);
     return e.convert(T, gpa, a.value, a.local_name);
 }
 
 /// Like `attrOpt`, but the result is allocated with `gpa` (strings are copied).
-pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) AttrOptError!?T {
+pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) (AttrOptLookupError || value.ValueError(T, true))!?T {
     const a = (try e.optionalAttr(attr_name)) orelse return null;
     return try e.convert(T, gpa, a.value, a.local_name);
 }
@@ -234,7 +227,7 @@ pub fn children(e: *Elem, child_name: []const u8) ChildrenError![]const *Elem {
 
 /// Text of the element parsed as `T`. Strings are borrowed.
 /// Fails with `error.HasChildren` if the element has child elements.
-pub fn text(e: *Elem, comptime T: type) TextError!T {
+pub fn text(e: *Elem, comptime T: type) (TextLookupError || value.ValueError(T, false))!T {
     try e.useText();
     return e.convert(T, null, e.text_content, null);
 }
@@ -246,7 +239,7 @@ pub fn textWith(e: *Elem, parser: anytype) WithResult(TextLookupError, @TypeOf(p
 }
 
 /// Like `text`, but the result is allocated with `gpa` (strings are copied).
-pub fn textAlloc(e: *Elem, gpa: Allocator, comptime T: type) TextError!T {
+pub fn textAlloc(e: *Elem, gpa: Allocator, comptime T: type) (TextLookupError || value.ValueError(T, true))!T {
     try e.useText();
     return e.convert(T, gpa, e.text_content, null);
 }
@@ -369,17 +362,15 @@ fn useText(e: *Elem) TextLookupError!void {
 }
 
 /// `gpa` is `null` (borrowed result) or an `Allocator` (owned result), see `value.parse`.
-fn convert(e: *Elem, comptime T: type, gpa: anytype, s: []const u8, selector: ?[]const u8) ValueError!T {
-    var failure: value.Failure = undefined;
-    return value.parse(T, gpa, s, &failure) catch switch (failure) {
-        .out_of_memory => {
+fn convert(e: *Elem, comptime T: type, gpa: anytype, s: []const u8, selector: ?[]const u8) value.ValueError(T, value.isOwned(@TypeOf(gpa)))!T {
+    var message: []const u8 = undefined;
+    return value.parse(T, gpa, s, &message) catch |err| {
+        if (@as(anyerror, err) == error.OutOfMemory) {
             e.report(.value_out_of_memory, selector, null, value_oom_message);
-            return error.OutOfMemory;
-        },
-        .invalid => |message| {
+        } else {
             e.report(.invalid_value, selector, s, message);
-            return error.InvalidValue;
-        },
+        }
+        return err;
     };
 }
 

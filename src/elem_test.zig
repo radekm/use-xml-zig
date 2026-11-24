@@ -523,6 +523,36 @@ test "out of memory is recorded in diagnostics" {
     }
 }
 
+/// Hooks with different error sets.
+const HookErrors = struct {
+    pub fn parseXml(s: []const u8) error{Bad}!HookErrors {
+        if (s.len == 0) return error.Bad;
+        return .{};
+    }
+    pub fn parseXmlAlloc(_: std.mem.Allocator, s: []const u8) error{OutOfMemory}!HookErrors {
+        if (s.len == 0) return error.OutOfMemory;
+        return .{};
+    }
+};
+const HookAnyError = struct {
+    pub fn parseXml(s: []const u8) anyerror!HookAnyError {
+        if (s.len == 0) return error.Bad;
+        return .{};
+    }
+};
+
+test "errors of hooks are mapped to InvalidValue and OutOfMemory" {
+    var f = try Fixture.init("<a><b/><c/><d/></a>");
+    defer f.deinit();
+    const a = f.root();
+    try t.expectError(error.InvalidValue, (try a.child("b")).text(HookErrors));
+    try f.expectDiag(.invalid_value, "/a/b[0]: Bad (input: \"\")");
+    try t.expectError(error.OutOfMemory, (try a.child("c")).textAlloc(t.allocator, HookErrors));
+    try t.expectEqual(Diagnostics.Kind.value_out_of_memory, f.box.diag.kind);
+    try t.expectError(error.InvalidValue, (try a.child("d")).text(HookAnyError));
+    try f.expectDiag(.invalid_value, "/a/d[0]: Bad (input: \"\")");
+}
+
 test "each function returns only the errors that can happen" {
     var f = try Fixture.init("<a x=\"1\"><b/><b/></a>");
     defer f.deinit();
@@ -540,7 +570,33 @@ test "each function returns only the errors that can happen" {
     _ = a.attrOpt(u8, "x") catch |err| switch (err) {
         error.AlreadyUsed, error.InvalidValue, error.OutOfMemory => null,
     };
+    // Errors of the value depend on `T`.
+    _ = a.attr([]const u8, "y") catch |err| switch (err) {
+        error.Missing, error.AlreadyUsed, error.OutOfMemory => null,
+    };
     _ = a.text([]const u8) catch |err| switch (err) {
+        error.HasChildren, error.AlreadyUsed => null,
+    };
+    _ = a.textAlloc(t.allocator, []const u8) catch |err| switch (err) {
+        error.HasChildren, error.AlreadyUsed, error.OutOfMemory => null,
+    };
+    _ = a.text(u32) catch |err| switch (err) {
+        error.HasChildren, error.AlreadyUsed, error.InvalidValue => null,
+    };
+    _ = a.text(Timestamp) catch |err| switch (err) {
+        error.HasChildren, error.AlreadyUsed, error.InvalidValue => null,
+    };
+    // Hooks: `InvalidValue` for errors other than `OutOfMemory`, `OutOfMemory` if it can happen.
+    _ = a.text(Length) catch |err| switch (err) {
+        error.HasChildren, error.AlreadyUsed => null,
+    };
+    _ = a.text(HookErrors) catch |err| switch (err) {
+        error.HasChildren, error.AlreadyUsed, error.InvalidValue => null,
+    };
+    _ = a.textAlloc(t.allocator, HookErrors) catch |err| switch (err) {
+        error.HasChildren, error.AlreadyUsed, error.OutOfMemory => null,
+    };
+    _ = a.text(HookAnyError) catch |err| switch (err) {
         error.HasChildren, error.AlreadyUsed, error.InvalidValue, error.OutOfMemory => null,
     };
     // The alias in the root module.

@@ -5,38 +5,71 @@ const Allocator = std.mem.Allocator;
 const builtin_parsers = @import("parse.zig");
 const Timestamp = @import("Timestamp.zig");
 
-/// Reasons a value can't be produced, before the error is reported in `Diagnostics`.
-pub const Failure = union(enum) {
-    /// The string is not a valid `T`. The message is static.
-    invalid: []const u8,
-    out_of_memory,
-};
+/// Errors of parsing a value of type `T` (`owned`: for an `...Alloc` function); only the errors
+/// that can happen:
+/// - `[]const u8`: none, or `OutOfMemory` when it is copied (`owned`),
+/// - numbers, `bool`, enums and `Timestamp`: `InvalidValue`,
+/// - hooks: `InvalidValue` if the hook can fail with an error other than `OutOfMemory`,
+///   and `OutOfMemory` if the hook can fail with it.
+pub fn ValueError(comptime T: type, comptime owned: bool) type {
+    if (T == []const u8) return if (owned) error{OutOfMemory} else error{};
+    if (T == Timestamp) return error{InvalidValue};
+    switch (@typeInfo(T)) {
+        .int, .float, .bool => return error{InvalidValue},
+        .@"struct", .@"enum", .@"union" => if (@hasDecl(T, "parseXml") or @hasDecl(T, "parseXmlAlloc")) {
+            return HookError(T, owned);
+        } else if (@typeInfo(T) == .@"enum") {
+            return error{InvalidValue};
+        },
+        else => {},
+    }
+    return error{}; // An unsupported type: `parse` reports it.
+}
+
+fn HookError(comptime T: type, comptime owned: bool) type {
+    const hook_name = if (owned) "parseXmlAlloc" else "parseXml";
+    if (!@hasDecl(T, hook_name)) return error{}; // `parseWithHook` reports it.
+    const R = @typeInfo(@TypeOf(@field(T, hook_name))).@"fn".return_type orelse
+        @compileError(@typeName(T) ++ "." ++ hook_name ++ " must not be generic");
+    if (@typeInfo(R) != .error_union) return error{};
+    const names = @typeInfo(@typeInfo(R).error_union.error_set).error_set.error_names orelse
+        return error{ InvalidValue, OutOfMemory }; // anyerror
+    var oom = false;
+    var other = false;
+    for (names) |name| {
+        if (std.mem.eql(u8, name, "OutOfMemory")) oom = true else other = true;
+    }
+    return switch (@as(u2, @intFromBool(oom)) << 1 | @intFromBool(other)) {
+        0b00 => error{},
+        0b01 => error{InvalidValue},
+        0b10 => error{OutOfMemory},
+        0b11 => error{ InvalidValue, OutOfMemory },
+    };
+}
 
 /// Parses `s` into `T`. `gpa` is either `null` (the result may borrow `s`) or an `Allocator`
 /// (the result must not borrow `s`: strings are copied and user hooks must be `parseXmlAlloc`).
-pub fn parse(comptime T: type, gpa: anytype, s: []const u8, failure: *Failure) error{Failed}!T {
+/// On `error.InvalidValue`, `message` is set to a static description.
+pub fn parse(comptime T: type, gpa: anytype, s: []const u8, message: *[]const u8) ValueError(T, isOwned(@TypeOf(gpa)))!T {
     const owned = comptime isOwned(@TypeOf(gpa));
     if (T == []const u8) {
         if (!owned) return s;
-        return gpa.dupe(u8, s) catch {
-            failure.* = .out_of_memory;
-            return error.Failed;
-        };
+        return gpa.dupe(u8, s);
     }
 
     if (T == Timestamp) {
-        return builtin(Timestamp.parse(s), "expected timestamp YYYY-MM-DDTHH:MM:SS[.fraction]Z", failure);
+        return builtin(Timestamp.parse(s), "expected timestamp YYYY-MM-DDTHH:MM:SS[.fraction]Z", message);
     }
 
     switch (@typeInfo(T)) {
         .optional => @compileError("optional types are not supported; use the `Opt` variants"),
-        .int => return builtin(builtin_parsers.int(T, s), "expected integer (" ++ @typeName(T) ++ ")", failure),
-        .float => return builtin(builtin_parsers.float(T, s), "expected decimal number", failure),
-        .bool => return builtin(builtin_parsers.boolean(s), "expected 'true' or 'false'", failure),
+        .int => return builtin(builtin_parsers.int(T, s), "expected integer (" ++ @typeName(T) ++ ")", message),
+        .float => return builtin(builtin_parsers.float(T, s), "expected decimal number", message),
+        .bool => return builtin(builtin_parsers.boolean(s), "expected 'true' or 'false'", message),
         .@"struct", .@"enum", .@"union" => if (@hasDecl(T, "parseXml") or @hasDecl(T, "parseXmlAlloc")) {
-            return parseWithHook(T, gpa, s, failure);
+            return parseWithHook(T, gpa, s, message);
         } else if (@typeInfo(T) == .@"enum") {
-            return builtin(builtin_parsers.enumTag(T, s), comptime enumMessage(T), failure);
+            return builtin(builtin_parsers.enumTag(T, s), comptime enumMessage(T), message);
         },
         else => {},
     }
@@ -44,10 +77,10 @@ pub fn parse(comptime T: type, gpa: anytype, s: []const u8, failure: *Failure) e
         "; add `pub fn parseXml([]const u8) !" ++ @typeName(T) ++ "` or use a custom parser");
 }
 
-fn builtin(result: anytype, comptime message: []const u8, failure: *Failure) error{Failed}!@typeInfo(@TypeOf(result)).error_union.payload {
+fn builtin(result: anytype, comptime description: []const u8, message: *[]const u8) error{InvalidValue}!@typeInfo(@TypeOf(result)).error_union.payload {
     return result catch {
-        failure.* = .{ .invalid = message };
-        return error.Failed;
+        message.* = description;
+        return error.InvalidValue;
     };
 }
 
@@ -59,13 +92,13 @@ fn enumMessage(comptime E: type) []const u8 {
     return message;
 }
 
-fn isOwned(comptime G: type) bool {
+pub fn isOwned(comptime G: type) bool {
     if (G == Allocator) return true;
     if (G == @TypeOf(null)) return false;
     @compileError("expected an Allocator or null, got " ++ @typeName(G));
 }
 
-fn parseWithHook(comptime T: type, gpa: anytype, s: []const u8, failure: *Failure) error{Failed}!T {
+fn parseWithHook(comptime T: type, gpa: anytype, s: []const u8, message: *[]const u8) ValueError(T, isOwned(@TypeOf(gpa)))!T {
     // `...Alloc` functions promise a result that outlives the document. `parseXml` may return
     // slices of its input, so it is never used for them.
     const result = if (comptime isOwned(@TypeOf(gpa)))
@@ -81,10 +114,25 @@ fn parseWithHook(comptime T: type, gpa: anytype, s: []const u8, failure: *Failur
         @compileError(@typeName(T) ++ " has only `parseXmlAlloc`; use an `...Alloc` function");
     // A hook may also return `T` without an error.
     if (@typeInfo(@TypeOf(result)) != .error_union) return result;
+    const E = ValueError(T, isOwned(@TypeOf(gpa)));
     return result catch |err| {
-        failure.* = if (@as(anyerror, err) == error.OutOfMemory) .out_of_memory else .{ .invalid = @errorName(err) };
-        return error.Failed;
+        // `E` contains exactly the branches below that can happen.
+        if (comptime errorIn(E, "OutOfMemory")) {
+            if (@as(anyerror, err) == error.OutOfMemory) return error.OutOfMemory;
+        }
+        if (comptime errorIn(E, "InvalidValue")) {
+            message.* = @errorName(err);
+            return error.InvalidValue;
+        }
+        unreachable;
     };
+}
+
+fn errorIn(comptime E: type, comptime name: []const u8) bool {
+    for (@typeInfo(E).error_set.error_names.?) |err_name| {
+        if (std.mem.eql(u8, err_name, name)) return true;
+    }
+    return false;
 }
 
 /// The function called for a custom parser of type `Parser`: the parser itself if it is a

@@ -58,10 +58,11 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 | 2026-11-23 | License: zlib. |
 | 2026-11-24 | Diagnostics are passed in `Options.diagnostics` and copy the description into a buffer from the caller (`Diagnostics.init(&buf)`), so they stay valid after `doc.deinit()`. One `Diagnostics` type for syntax and extraction errors (`ParseDiagnostics` and `doc.diagnostics()` are removed); long names/values are shortened, a description that doesn't fit is cut (`truncated`). Replaces the decision of 2026-11-23 about diagnostics stored in the document. |
 | 2026-11-24 | `Diagnostics` also record `error.OutOfMemory`, so it describes every error returned by the extraction functions. Kind `document_out_of_memory` = the document's internal memory, `value_out_of_memory` = producing the value (allocator of `...Alloc`, custom parser, `parseXmlAlloc`). |
-| 2026-11-24 | `error.WrongCount` is split into `Missing`, `TooMany` and `HasChildren`. Every extraction function returns only the errors that can happen (`ChildError`, `AttrError`, …); `use_xml.Error` is the union of all. |
+| 2026-11-24 | `error.WrongCount` is split into `Missing`, `TooMany` and `HasChildren`. Every extraction function returns only the errors that can happen (`ChildError`, `AttrLookupError`, …); `use_xml.Error` is the union of all. |
 | 2026-11-24 | A custom parser in `...With` functions is a function or a value (or pointer) with a method `parse`; the value carries run-time state. No separate context functions. |
 | 2026-11-24 | `...Alloc` functions use only the `parseXmlAlloc` hook; a type with only `parseXml` can't be used with them (compile error), so an owned result never borrows the document. |
 | 2026-11-24 | After the review: a custom parser may also be a pointer to a function; a `parseXml` / `parseXmlAlloc` hook may return a value without an error. Diagnostics shorten long element paths from the start (`/…/b[0]`), replace invalid UTF-8 in names passed in by U+FFFD, and `"{f}"` prints the kind when nothing of the description fits into the buffer. |
+| 2026-11-24 | Errors of the value in `attr*` / `text*` without `With` depend on `T` (e.g. `text([]const u8)` can't fail with `InvalidValue` or `OutOfMemory`). The constants `AttrError`, `AttrOptError`, `TextError` and `ValueError` are removed; the rule is a table in `api.md`. |
 | 2026-11-23 | Only the `master` branch is used. |
 
 ## Milestones
