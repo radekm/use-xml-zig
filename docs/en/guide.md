@@ -191,7 +191,11 @@ Zig errors can't carry data, so the details are stored separately:
 | `InvalidValue`   | `invalid_value`    | `/server: "port": expected integer (u16) (input: "80x")` |
 | custom parser's  | `invalid_value`    | `/a: "d": UnknownColor (input: "blue")` |
 | `UnusedData`     | `unused_data`      | `/config/server[0]: "tls": attribute was not used (input: "true")` |
-| `OutOfMemory`    | `out_of_memory`    | `/a: "x": out of memory` |
+| `OutOfMemory`    | `value_out_of_memory` | `/a: "x": out of memory while producing the value` |
+| `OutOfMemory`    | `document_out_of_memory` | `/a: document out of memory` |
+
+`value_out_of_memory` means that producing the value ran out of memory (the allocator passed to
+`...Alloc`, or your parser); `document_out_of_memory` means that the document's own memory ran out.
 
 **`doc.diagnostics()` points into the document, so report the error before `doc.deinit()`.**
 With `defer doc.deinit()` followed by `errdefer …` (as in the quick start) the `errdefer` runs first,

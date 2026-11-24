@@ -339,7 +339,18 @@ pub const Diagnostics = struct {
     /// Human-readable message (static string or error name).
     message: []const u8 = "",
 
-    pub const Kind = enum { none, wrong_count, already_used, invalid_value, unused_data, out_of_memory };
+    pub const Kind = enum {
+        none,
+        wrong_count,
+        already_used,
+        invalid_value,
+        unused_data,
+        /// The document's internal memory (the allocator passed to `Document.parse`) ran out.
+        document_out_of_memory,
+        /// Producing the value ran out of memory: the allocator passed to an `...Alloc` function,
+        /// or a custom parser / `parseXmlAlloc` hook returned `error.OutOfMemory`.
+        value_out_of_memory,
+    };
 
     /// Prints e.g. `/company/address[0]: "city": attribute is missing`.
     pub fn format(d: Diagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void;
@@ -354,8 +365,11 @@ Chyby se popisují na dvou místech:
 - **Chyby extrakčních funkcí a `expectAllUsed`** si zaznamenává sám dokument; `doc.diagnostics()`
   vrátí tu poslední. Její slicy ukazují do vstupu nebo do dokumentu, takže platí jen do
   `doc.deinit()`. Protože je součástí dokumentu, je tato doba platnosti zřejmá.
-  Zaznamenává se každá chyba, kterou tyto funkce vrátí, i `error.OutOfMemory` (druh
-  `out_of_memory`), takže po chybě knihovny ji `doc.diagnostics()` vždy popisuje.
+  Zaznamenává se každá chyba, kterou tyto funkce vrátí, i `error.OutOfMemory`, takže po chybě
+  knihovny ji `doc.diagnostics()` vždy popisuje. Dva druhy říkají, kde paměť došla:
+  `document_out_of_memory` (interní paměť dokumentu, používaná jen k zapamatování vyžádaných
+  jmen, která neexistují) a `value_out_of_memory` (vytváření hodnoty: alokátor funkce `...Alloc`,
+  nebo vlastní parser či hook `parseXmlAlloc`, který vrátil `error.OutOfMemory`).
 
   Drží jen **poslední** chybu: každá chyba ji přepíše a nic jiného ji nemění. Volání, která
   uspějí, v ní nechají předchozí chybu, proto `doc.diagnostics()` čti hned po chybě (v `catch`
@@ -392,7 +406,7 @@ Příklad `examples/m7/m7.zig` ukazuje totéž s writerem, který předá volaj�
   alokovaná pro neúspěšnou hodnotu se před návratem uvolní. Hodnoty vrácené dřívějšími voláními
   patří volajícímu, který je uvolní jako obvykle (`errdefer`).
 - Každá chyba `error.OutOfMemory` extrakční funkce se zaznamená do `doc.diagnostics()` (druh
-  `out_of_memory`); zaznamenání nic nealokuje.
+  `document_out_of_memory` nebo `value_out_of_memory`, viz výše); zaznamenání nic nealokuje.
 - Hodnota se označí jako použitá ještě před parsováním. I když parsování selže (nevalidní hodnota,
   nedostatek paměti), druhé vyžádání stejného jména selže s `error.AlreadyUsed`.
 

@@ -341,7 +341,18 @@ pub const Diagnostics = struct {
     /// Human-readable message (static string or error name).
     message: []const u8 = "",
 
-    pub const Kind = enum { none, wrong_count, already_used, invalid_value, unused_data, out_of_memory };
+    pub const Kind = enum {
+        none,
+        wrong_count,
+        already_used,
+        invalid_value,
+        unused_data,
+        /// The document's internal memory (the allocator passed to `Document.parse`) ran out.
+        document_out_of_memory,
+        /// Producing the value ran out of memory: the allocator passed to an `...Alloc` function,
+        /// or a custom parser / `parseXmlAlloc` hook returned `error.OutOfMemory`.
+        value_out_of_memory,
+    };
 
     /// Prints e.g. `/company/address[0]: "city": attribute is missing`.
     pub fn format(d: Diagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void;
@@ -356,8 +367,12 @@ Errors are described in two places:
 - **Errors of extraction functions and of `expectAllUsed`** are recorded by the document itself;
   `doc.diagnostics()` returns the last one. Its slices point into the input or into the document,
   so it is valid only until `doc.deinit()`. Being part of the document makes this lifetime
-  obvious. Every error these functions return is recorded, `error.OutOfMemory` too (kind
-  `out_of_memory`), so after an error of the library `doc.diagnostics()` always describes it.
+  obvious. Every error these functions return is recorded, `error.OutOfMemory` too, so after an
+  error of the library `doc.diagnostics()` always describes it. Two kinds tell where the memory
+  ran out: `document_out_of_memory` (the document's internal memory, used only to remember
+  requested names that don't exist) and `value_out_of_memory` (producing the value: the allocator
+  of an `...Alloc` function, or a custom parser or `parseXmlAlloc` hook that returned
+  `error.OutOfMemory`).
 
   It holds only the **last** error: every error overwrites it, and nothing else changes it. Calls
   that succeed leave the previous error in place, so read `doc.diagnostics()` right after an error
@@ -394,7 +409,7 @@ The example `examples/m7/m7.zig` shows the same with a writer passed in by the c
   leaked: memory allocated for the failed value is freed before returning. Values returned by
   earlier calls belong to the caller, who frees them as usual (`errdefer`).
 - Every `error.OutOfMemory` of an extraction function is recorded in `doc.diagnostics()` (kind
-  `out_of_memory`); recording it doesn't allocate.
+  `document_out_of_memory` or `value_out_of_memory`, see above); recording it doesn't allocate.
 - The value is marked as used before parsing. So even when parsing fails (invalid value, out of
   memory) a second request for the same name fails with `error.AlreadyUsed`.
 

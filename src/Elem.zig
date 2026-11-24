@@ -251,9 +251,12 @@ fn report(e: *Elem, kind: Diagnostics.Kind, selector: ?[]const u8, input: ?[]con
     e.ctx.diag = .{ .kind = kind, .elem = e, .selector = selector, .input = input, .message = message };
 }
 
-/// Records `error.OutOfMemory`. `selector` must be owned by the document (or null).
-fn reportOutOfMemory(e: *Elem, selector: ?[]const u8) error{OutOfMemory} {
-    e.report(.out_of_memory, selector, null, "out of memory");
+const document_oom_message = "document out of memory";
+const value_oom_message = "out of memory while producing the value";
+
+/// Records that the document's internal memory ran out.
+fn reportDocumentOutOfMemory(e: *Elem) error{OutOfMemory} {
+    e.report(.document_out_of_memory, null, null, document_oom_message);
     return error.OutOfMemory;
 }
 
@@ -268,8 +271,8 @@ fn useMissing(e: *Elem, kind: @FieldType(Missing, "kind"), wanted: []const u8, m
     }
     const arena = e.ctx.arena.allocator();
     // `wanted` belongs to the caller, so it can't be the selector of the diagnostics.
-    const node = arena.create(Missing) catch return e.reportOutOfMemory(null);
-    const name_copy = arena.dupe(u8, wanted) catch return e.reportOutOfMemory(null);
+    const node = arena.create(Missing) catch return e.reportDocumentOutOfMemory();
+    const name_copy = arena.dupe(u8, wanted) catch return e.reportDocumentOutOfMemory();
     node.* = .{ .kind = kind, .name = name_copy, .next = e.missing };
     e.missing = node;
     return node.name;
@@ -337,7 +340,10 @@ fn useText(e: *Elem) Error!void {
 fn convert(e: *Elem, comptime T: type, gpa: anytype, s: []const u8, selector: ?[]const u8) Error!T {
     var failure: value.Failure = undefined;
     return value.parse(T, gpa, s, &failure) catch switch (failure) {
-        .out_of_memory => e.reportOutOfMemory(selector),
+        .out_of_memory => {
+            e.report(.value_out_of_memory, selector, null, value_oom_message);
+            return error.OutOfMemory;
+        },
         .invalid => |message| {
             e.report(.invalid_value, selector, s, message);
             return error.InvalidValue;
@@ -350,7 +356,8 @@ fn callParser(e: *Elem, comptime parser: anytype, args: anytype, selector: ?[]co
     if (@typeInfo(R) == .error_union) {
         return @call(.auto, parser, args) catch |err| {
             if (@as(anyerror, err) == error.OutOfMemory) {
-                e.report(.out_of_memory, selector, null, "out of memory");
+                // The parser can't use the document's memory, so it is the value's.
+                e.report(.value_out_of_memory, selector, null, value_oom_message);
             } else {
                 e.report(.invalid_value, selector, s, @errorName(err));
             }

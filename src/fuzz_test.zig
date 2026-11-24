@@ -278,7 +278,8 @@ const Ex = struct {
             // Every error must be recorded (diagnostics are cleared before each call).
             const recorded = x.doc.diagnostics().kind;
             if (recorded == .none) return error.TestUnexpectedResult;
-            if ((er == error.OutOfMemory) != (recorded == .out_of_memory)) return error.TestUnexpectedResult;
+            const oom_kind = recorded == .document_out_of_memory or recorded == .value_out_of_memory;
+            if ((er == error.OutOfMemory) != oom_kind) return error.TestUnexpectedResult;
             try x.fmt(x.doc.diagnostics());
         }
         // Names are compared by value; for kind 0/1 the lookup is by local name.

@@ -327,7 +327,7 @@ test "...Alloc variants report out of memory" {
     defer f.deinit();
     var failing: std.testing.FailingAllocator = .init(t.allocator, .{ .fail_index = 0 });
     try t.expectError(error.OutOfMemory, f.root().attrAlloc(failing.allocator(), []const u8, "x"));
-    try f.expectDiag(.out_of_memory, "/a: \"x\": out of memory");
+    try f.expectDiag(.value_out_of_memory, "/a: \"x\": out of memory while producing the value");
     try t.expectError(error.AlreadyUsed, f.root().attr([]const u8, "x"));
 }
 
@@ -339,7 +339,24 @@ test "out of memory is recorded in diagnostics" {
         _ = try f.root().child("b"); // diagnostics must not keep an older state
         var failing: std.testing.FailingAllocator = .init(t.allocator, .{ .fail_index = 0 });
         try t.expectError(error.OutOfMemory, f.root().attrAllocWith(failing.allocator(), "w", splitWords));
-        try f.expectDiag(.out_of_memory, "/a: \"w\": out of memory");
+        try f.expectDiag(.value_out_of_memory, "/a: \"w\": out of memory while producing the value");
+    }
+    // A parser without an allocator from us may still return OutOfMemory, and so may a hook.
+    {
+        var f = try Fixture.init("<a w=\"x\" n=\"y\"/>");
+        defer f.deinit();
+        const S = struct {
+            fn fixedBuffer(s: []const u8) error{OutOfMemory}![]u8 {
+                var buf: [0]u8 = undefined;
+                var fba: std.heap.FixedBufferAllocator = .init(&buf);
+                return fba.allocator().dupe(u8, s);
+            }
+        };
+        try t.expectError(error.OutOfMemory, f.root().attrWith("w", S.fixedBuffer));
+        try f.expectDiag(.value_out_of_memory, "/a: \"w\": out of memory while producing the value");
+        var failing: std.testing.FailingAllocator = .init(t.allocator, .{ .fail_index = 0 });
+        try t.expectError(error.OutOfMemory, f.root().attrAlloc(failing.allocator(), Name, "n"));
+        try f.expectDiag(.value_out_of_memory, "/a: \"n\": out of memory while producing the value");
     }
     // Remembering a missing name in the document's arena fails.
     {
@@ -353,9 +370,9 @@ test "out of memory is recorded in diagnostics" {
         defer t.allocator.free(long_name);
         @memset(long_name, 'n');
         try t.expectError(error.OutOfMemory, doc.root().attrOpt(u8, long_name));
-        try t.expectEqual(Diagnostics.Kind.out_of_memory, doc.diagnostics().kind);
+        try t.expectEqual(Diagnostics.Kind.document_out_of_memory, doc.diagnostics().kind);
         var buf: [64]u8 = undefined;
-        try t.expectEqualStrings("/a: out of memory", try std.fmt.bufPrint(&buf, "{f}", .{doc.diagnostics()}));
+        try t.expectEqualStrings("/a: document out of memory", try std.fmt.bufPrint(&buf, "{f}", .{doc.diagnostics()}));
     }
 }
 

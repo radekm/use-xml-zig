@@ -191,7 +191,11 @@ Chyby v Zigu nemohou nést data, proto se podrobnosti ukládají zvlášť:
 | `InvalidValue`    | `invalid_value`    | `/server: "port": expected integer (u16) (input: "80x")` |
 | z vlastního parseru | `invalid_value`  | `/a: "d": UnknownColor (input: "blue")` |
 | `UnusedData`      | `unused_data`      | `/config/server[0]: "tls": attribute was not used (input: "true")` |
-| `OutOfMemory`     | `out_of_memory`    | `/a: "x": out of memory` |
+| `OutOfMemory`     | `value_out_of_memory` | `/a: "x": out of memory while producing the value` |
+| `OutOfMemory`     | `document_out_of_memory` | `/a: document out of memory` |
+
+`value_out_of_memory` znamená, že paměť došla při vytváření hodnoty (alokátor předaný do
+`...Alloc` nebo váš parser); `document_out_of_memory` znamená, že došla vlastní paměť dokumentu.
 
 **`doc.diagnostics()` ukazuje do dokumentu, proto chybu nahlaste před `doc.deinit()`.**
 Když po `defer doc.deinit()` následuje `errdefer …` (jako v rychlém startu), proběhne `errdefer`

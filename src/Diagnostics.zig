@@ -24,7 +24,18 @@ input: ?[]const u8 = null,
 message: []const u8 = "",
 
 /// What went wrong. `none` means no error was recorded.
-pub const Kind = enum { none, wrong_count, already_used, invalid_value, unused_data, out_of_memory };
+pub const Kind = enum {
+    none,
+    wrong_count,
+    already_used,
+    invalid_value,
+    unused_data,
+    /// The document's internal memory (the allocator passed to `Document.parse`) ran out.
+    document_out_of_memory,
+    /// Producing the value ran out of memory: the allocator passed to an `...Alloc` function,
+    /// or a custom parser / `parseXmlAlloc` hook returned `error.OutOfMemory`.
+    value_out_of_memory,
+};
 
 /// Prints a one-line description, e.g. `/company/address[0]: "city": attribute is missing`.
 pub fn format(d: Diagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void {
