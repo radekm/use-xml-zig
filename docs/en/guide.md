@@ -158,6 +158,8 @@ const created = try img.attr(use_xml.Timestamp, "created");
 
 - `attrWith` / `textWith` take any function `fn ([]const u8) E!R`, also as a pointer
   (`*const fn ([]const u8) E!R`). Its error is returned unchanged.
+- Prefer `attrWith(name, parser)` to `parser(try attr([]const u8, name))`: only an error inside
+  `attrWith` is recorded in `Diagnostics` together with the path, the name and the input.
 - A parser that needs state (e.g. values known only at run time) is a value with a method
   `pub fn parse(self, []const u8) E!R`; pass the value (or a pointer to it) instead of a function:
 

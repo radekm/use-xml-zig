@@ -157,6 +157,8 @@ const created = try img.attr(use_xml.Timestamp, "created");
 
 - `attrWith` / `textWith` berou libovolnou funkci `fn ([]const u8) E!R`, i jako ukazatel
   (`*const fn ([]const u8) E!R`). Její chyba se vrátí beze změny.
+- Místo `parser(try attr([]const u8, name))` pište `attrWith(name, parser)`: jen chyba uvnitř
+  `attrWith` se zaznamená do `Diagnostics` i s cestou, jménem a vstupem.
 - Parser, který potřebuje stav (např. hodnoty známé až za běhu), je hodnota s metodou
   `pub fn parse(self, []const u8) E!R`; místo funkce se předá tato hodnota (nebo ukazatel na ni):
 

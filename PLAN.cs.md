@@ -64,6 +64,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 | 2026-11-24 | Po review: vlastní parser smí být i ukazatel na funkci; hook `parseXml` / `parseXmlAlloc` smí vracet hodnotu bez chyby. Diagnostika zkracuje dlouhé cesty k elementům od začátku (`/…/b[0]`), neplatné UTF-8 v předaných jménech nahrazuje znakem U+FFFD a `"{f}"` vypíše druh chyby, když se do bufferu nevejde nic z popisu. |
 | 2026-11-24 | Chyby hodnoty v `attr*` / `text*` bez `With` závisí na `T` (např. `text([]const u8)` nemůže selhat s `InvalidValue` ani `OutOfMemory`). Konstanty `AttrError`, `AttrOptError`, `TextError` a `ValueError` jsou zrušené; pravidlo je tabulka v `api.md`. |
 | 2026-11-24 | Zápis do `Diagnostics` (`reset`, `record`, `recordInvalidXml`, `lineColumn`) je v interním `recording.zig`, který `root.zig` neexportuje. Veřejné API `Diagnostics` tvoří jen `init`, `message`, `format` a pole; `reset` není veřejný. |
+| 2026-11-24 | Varianty `...With` zůstávají, i když řetězce z `attr` / `text` jsou už dekódované a šly by naparsovat dodatečně: jsou tu proto, aby se chyba parseru zaznamenala do `Diagnostics` i s cestou, jménem a vstupem. |
 | 2026-11-23 | Používá se pouze větev `master`. |
 
 ## Milníky

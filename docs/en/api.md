@@ -222,6 +222,13 @@ the document remembers requested names that don't exist.
 
 #### Custom parsers
 
+Strings are decoded already by `Document.parse`, so `attr([]const u8, …)` / `text([]const u8)`
+return the final value and it could be parsed afterwards by any function. The `...With` variants
+(and the built-in types and hooks) exist **for error reporting**: when the parser fails inside
+them, the library records the path, the attribute name and the input in `Options.diagnostics`
+(`/a/b[0]: "x": UnknownUnit (input: "pt")`). An error of a function called afterwards is not
+recorded (the library doesn't see it), so the caller would have to build such a description itself.
+
 `parser` in the `...With` functions is either a **function** (also a pointer to a function, e.g.
 one chosen at run time) or a **value with a method `parse`**. A value can carry state known only
 at run time (allowed values from a configuration, a lookup table, a counter, …). It can also be a

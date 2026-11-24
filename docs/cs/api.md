@@ -222,6 +222,13 @@ dokument si pamatuje vyžádaná jména, která neexistují.
 
 #### Vlastní parsery
 
+Řetězce dekóduje už `Document.parse`, takže `attr([]const u8, …)` / `text([]const u8)` vrací
+hotovou hodnotu a dala by se naparsovat i dodatečně libovolnou funkcí. Varianty `...With`
+(a vestavěné typy a hooky) jsou tu **kvůli hlášení chyb**: když parser selže uvnitř nich, knihovna
+zaznamená do `Options.diagnostics` cestu, jméno atributu i vstup
+(`/a/b[0]: "x": UnknownUnit (input: "pt")`). Chyba funkce zavolané až potom se nezaznamená
+(knihovna ji nevidí), takže by si takový popis musel sestavit volající sám.
+
 `parser` ve funkcích `...With` je buď **funkce** (i ukazatel na funkci, např. zvolenou až za
 běhu), nebo **hodnota s metodou `parse`**. Hodnota může nést stav známý až za běhu (povolené
 hodnoty z konfigurace, lookup tabulku, počítadlo, …). Může to být i ukazatel, např. když `parse`
