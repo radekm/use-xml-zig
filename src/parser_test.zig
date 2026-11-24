@@ -173,6 +173,63 @@ test "whitespace" {
     }
 }
 
+test "many attributes and many groups of children (hash map lookup)" {
+    const gpa = t.allocator;
+    const n = 2000; // well above the threshold of the hash map
+    var buf: std.ArrayList(u8) = .empty;
+    defer buf.deinit(gpa);
+
+    // Many attributes.
+    try buf.appendSlice(gpa, "<r xmlns:p=\"u\"");
+    for (0..n) |i| try buf.print(gpa, " a{d}=\"{d}\"", .{ i, i });
+    try buf.appendSlice(gpa, ">");
+    // Many groups of children; every name occurs twice.
+    for (0..2) |_| {
+        for (0..n) |i| try buf.print(gpa, "<c{d}/>", .{i});
+    }
+    try buf.appendSlice(gpa, "</r>");
+    {
+        var doc = try Document.parse(gpa, buf.items, .{});
+        defer doc.deinit();
+        const r = doc.root();
+        try t.expectEqual(n, r.attrs.len);
+        try t.expectEqualStrings("1234", attrValue(r, "a1234").?);
+        try t.expectEqual(n, r.groups.len);
+        for (r.groups, 0..) |g, i| {
+            var name_buf: [16]u8 = undefined;
+            try t.expectEqualStrings(try std.fmt.bufPrint(&name_buf, "c{d}", .{i}), g.local_name);
+            try t.expectEqual(2, g.elems.len);
+            try t.expectEqual(1, g.elems[1].same_name_index);
+        }
+    }
+
+    // Errors are found at the same place as with linear lookup.
+    // `marker` is where the error is reported.
+    const cases = [_]struct { tail: []const u8, marker: []const u8, message: []const u8 }{
+        .{ .tail = " a7=\"x\"/>", .marker = "a7=\"x\"", .message = "duplicate attribute" },
+        .{ .tail = " p:a7=\"x\"/>", .marker = "p:a7", .message = "multiple attributes with the same local name" },
+        .{ .tail = "><c7/><c7/><p:c7/></r>", .marker = "<p:c7", .message = "child elements with the same local name have different prefixes" },
+    };
+    for (cases) |c| {
+        buf.clearRetainingCapacity();
+        try buf.appendSlice(gpa, "<r xmlns:p=\"u\"");
+        for (0..n) |i| try buf.print(gpa, " a{d}=\"\"", .{i});
+        if (std.mem.startsWith(u8, c.tail, ">")) {
+            // Children instead of extra attributes.
+            try buf.appendSlice(gpa, ">");
+            for (0..n) |i| try buf.print(gpa, "<c{d}/>", .{i});
+            try buf.appendSlice(gpa, c.tail[1..]);
+        } else {
+            try buf.appendSlice(gpa, c.tail);
+        }
+        const offset = std.mem.lastIndexOf(u8, buf.items, c.marker).?;
+        var diag: ParseDiagnostics = .{};
+        try t.expectError(error.InvalidXml, Document.parse(gpa, buf.items, .{ .diagnostics = &diag }));
+        try t.expectEqualStrings(c.message, diag.message);
+        try t.expectEqual(ParseDiagnostics.lineColumn(buf.items, offset).column, diag.column);
+    }
+}
+
 test "non-ASCII names" {
     var doc = try Document.parse(t.allocator, "<město název=\"Brno\"><ulice/></město>", .{});
     defer doc.deinit();
