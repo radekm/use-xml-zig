@@ -12,6 +12,8 @@ const std = @import("std");
 pub const Document = @import("Document.zig");
 /// An element of a document; has the extraction functions.
 pub const Elem = @import("Elem.zig");
+/// All errors of the extraction functions (each function returns only a subset, see `Elem`).
+pub const Error = Elem.Error;
 /// Details about the last extraction error, see `Document.diagnostics`.
 pub const Diagnostics = @import("Diagnostics.zig");
 /// Details about an XML syntax error, see `Document.Options.diagnostics`.

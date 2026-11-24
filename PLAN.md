@@ -57,6 +57,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 | 2026-11-23 | Extraction errors are recorded by the document (`doc.diagnostics()`), so it is obvious they are invalid after `doc.deinit()`; whoever parses reports them before that. XML syntax errors go to a separate `ParseDiagnostics` (no pointers) passed in `Options`. |
 | 2026-11-23 | License: zlib. |
 | 2026-11-24 | `doc.diagnostics()` also records `error.OutOfMemory`, so it describes every error returned by the extraction functions. Kind `document_out_of_memory` = the document's internal memory, `value_out_of_memory` = producing the value (allocator of `...Alloc`, custom parser, `parseXmlAlloc`). |
+| 2026-11-24 | `error.WrongCount` is split into `Missing`, `TooMany` and `HasChildren`. Every extraction function returns only the errors that can happen (`ChildError`, `AttrError`, …); `use_xml.Error` is the union of all. |
 | 2026-11-24 | `...Alloc` functions use only the `parseXmlAlloc` hook; a type with only `parseXml` can't be used with them (compile error), so an owned result never borrows the document. |
 | 2026-11-23 | Only the `master` branch is used. |
 

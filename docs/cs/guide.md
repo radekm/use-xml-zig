@@ -77,14 +77,14 @@ Postup je vždy stejný:
 
 ## Čtení dokumentu
 
-| Funkce                       | Vrací                         | Selže s `WrongCount`, když        |
-|------------------------------|-------------------------------|-----------------------------------|
-| `e.attr(T, "a")`             | hodnotu atributu `a`          | atribut chybí                     |
-| `e.attrOpt(T, "a")`          | hodnotu nebo `null`           | —                                 |
-| `e.child("c")`               | jediný podelement `<c>`       | není tam právě jeden `<c>`        |
-| `e.childOpt("c")`            | podelement `<c>` nebo `null`  | jsou tam dva nebo více `<c>`      |
-| `e.children("c")`            | všechny podelementy `<c>` (slice) | —                             |
-| `e.text(T)`                  | text elementu                 | element má podelementy            |
+| Funkce                       | Vrací                         | Selže, když                                     |
+|------------------------------|-------------------------------|-------------------------------------------------|
+| `e.attr(T, "a")`             | hodnotu atributu `a`          | `Missing`: atribut chybí                        |
+| `e.attrOpt(T, "a")`          | hodnotu nebo `null`           | —                                               |
+| `e.child("c")`               | jediný podelement `<c>`       | `Missing`: žádný `<c>`; `TooMany`: dva a více   |
+| `e.childOpt("c")`            | podelement `<c>` nebo `null`  | `TooMany`: dva nebo více `<c>`                  |
+| `e.children("c")`            | všechny podelementy `<c>` (slice) | —                                           |
+| `e.text(T)`                  | text elementu                 | `HasChildren`: element má podelementy           |
 | `e.ignoreAll()`              | označí vše v `e` jako použité | —                                 |
 
 Několik pravidel:
@@ -186,7 +186,9 @@ Chyby v Zigu nemohou nést data, proto se podrobnosti ukládají zvlášť:
 
 | Chyba             | `Diagnostics.kind` | Příklad `"{f}"` |
 |-------------------|--------------------|-----------------|
-| `WrongCount`      | `wrong_count`      | `/person: "name": expected exactly one child element, found none` |
+| `Missing`         | `missing`          | `/person: "name": expected exactly one child element, found none` |
+| `TooMany`         | `too_many`         | `/person: "name": expected at most one child element, found more than one` |
+| `HasChildren`     | `has_children`     | `/person: element has child elements, so it has no text` |
 | `AlreadyUsed`     | `already_used`     | `/a: "x": attribute was already used` |
 | `InvalidValue`    | `invalid_value`    | `/server: "port": expected integer (u16) (input: "80x")` |
 | z vlastního parseru | `invalid_value`  | `/a: "d": UnknownColor (input: "blue")` |

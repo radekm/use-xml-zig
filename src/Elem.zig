@@ -33,16 +33,43 @@ visited: bool = false,
 /// Names that were requested but don't exist in this element.
 missing: ?*Missing = null,
 
-/// Errors of the extraction functions. Details are in `Document.diagnostics()`.
+/// All errors of the extraction functions. Details are in `Document.diagnostics()`.
+/// Each function returns only the subset that can actually happen (see below).
 pub const Error = error{
-    /// Missing attribute/child, too many children, or text of an element with children.
-    WrongCount,
+    /// A required attribute or child element doesn't exist.
+    Missing,
+    /// More than one child element with the name, but at most one was expected.
+    TooMany,
+    /// Text was requested from an element that has child elements.
+    HasChildren,
     /// The same attribute / child name / text was requested twice.
     AlreadyUsed,
     /// A value parser rejected the string.
     InvalidValue,
+    /// See "Out of memory" in the API documentation.
     OutOfMemory,
 };
+
+/// Errors of `child`.
+pub const ChildError = error{ Missing, TooMany, AlreadyUsed, OutOfMemory };
+/// Errors of `childOpt`.
+pub const ChildOptError = error{ TooMany, AlreadyUsed, OutOfMemory };
+/// Errors of `children`.
+pub const ChildrenError = error{ AlreadyUsed, OutOfMemory };
+/// Errors of looking up a required attribute (`attr*` without `Opt`), before parsing the value.
+pub const AttrLookupError = error{ Missing, AlreadyUsed, OutOfMemory };
+/// Errors of looking up an optional attribute (`attrOpt*`), before parsing the value.
+pub const AttrOptLookupError = error{ AlreadyUsed, OutOfMemory };
+/// Errors of looking up the text (`text*`), before parsing the value.
+pub const TextLookupError = error{ HasChildren, AlreadyUsed };
+/// Errors of the built-in value parsing (`attr(T, …)`, `text(T)`, …).
+pub const ValueError = error{ InvalidValue, OutOfMemory };
+/// Errors of `attr` and `attrAlloc`.
+pub const AttrError = AttrLookupError || ValueError;
+/// Errors of `attrOpt` and `attrOptAlloc`.
+pub const AttrOptError = AttrOptLookupError || ValueError;
+/// Errors of `text` and `textAlloc`.
+pub const TextError = TextLookupError || ValueError;
 
 /// Internal: a requested name that doesn't exist in the element.
 pub const Missing = struct {
@@ -113,77 +140,79 @@ pub const Path = struct {
 
 // ------------------------------------------------------------------ attributes
 
-/// Value of attribute `attr_name` parsed as `T`. Fails with `error.WrongCount` if the attribute is missing.
+/// Value of attribute `attr_name` parsed as `T`. Fails with `error.Missing` if the attribute is missing.
 /// Strings are borrowed (valid while the document and the input live).
-pub fn attr(e: *Elem, comptime T: type, attr_name: []const u8) Error!T {
+pub fn attr(e: *Elem, comptime T: type, attr_name: []const u8) AttrError!T {
     const a = try e.requiredAttr(attr_name);
     return e.convert(T, null, a.value, a.local_name);
 }
 
 /// Like `attr`, but returns null if the attribute is missing.
-pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) Error!?T {
+pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) AttrOptError!?T {
     const a = (try e.optionalAttr(attr_name)) orelse return null;
     return try e.convert(T, null, a.value, a.local_name);
 }
 
 /// Value of attribute `attr_name` parsed by `parser: fn ([]const u8) E!R`.
-pub fn attrWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) WithResult(parser) {
+pub fn attrWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) WithResult(AttrLookupError, parser) {
     const a = try e.requiredAttr(attr_name);
     return e.callParser(parser, .{a.value}, a.local_name, a.value);
 }
 
 /// Like `attrWith`, but returns null if the attribute is missing.
-pub fn attrOptWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) OptWithResult(parser) {
+pub fn attrOptWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) OptWithResult(AttrOptLookupError, parser) {
     const a = (try e.optionalAttr(attr_name)) orelse return null;
     return try e.callParser(parser, .{a.value}, a.local_name, a.value);
 }
 
 /// Like `attr`, but the result is allocated with `gpa` (strings are copied).
-pub fn attrAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) Error!T {
+pub fn attrAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) AttrError!T {
     const a = try e.requiredAttr(attr_name);
     return e.convert(T, gpa, a.value, a.local_name);
 }
 
 /// Like `attrOpt`, but the result is allocated with `gpa` (strings are copied).
-pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) Error!?T {
+pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) AttrOptError!?T {
     const a = (try e.optionalAttr(attr_name)) orelse return null;
     return try e.convert(T, gpa, a.value, a.local_name);
 }
 
 /// Value of attribute `attr_name` parsed by `parser: fn (Allocator, []const u8) E!R`, which gets `gpa`.
-pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) WithResult(parser) {
+pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) WithResult(AttrLookupError, parser) {
     const a = try e.requiredAttr(attr_name);
     return e.callParser(parser, .{ gpa, a.value }, a.local_name, a.value);
 }
 
 /// Like `attrAllocWith`, but returns null if the attribute is missing.
-pub fn attrOptAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) OptWithResult(parser) {
+pub fn attrOptAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) OptWithResult(AttrOptLookupError, parser) {
     const a = (try e.optionalAttr(attr_name)) orelse return null;
     return try e.callParser(parser, .{ gpa, a.value }, a.local_name, a.value);
 }
 
 // ------------------------------------------------------------------ child elements
 
-/// The only child element named `child_name`. Fails with `error.WrongCount` unless there is exactly one.
-pub fn child(e: *Elem, child_name: []const u8) Error!*Elem {
+/// The only child element named `child_name`. Fails with `error.Missing` if there is none
+/// and with `error.TooMany` if there are more.
+pub fn child(e: *Elem, child_name: []const u8) ChildError!*Elem {
     const g = try e.useGroup(child_name);
-    if (g.elems.len != 1) {
-        e.report(.wrong_count, g.name, null, if (g.elems.len == 0)
-            "expected exactly one child element, found none"
-        else
-            "expected exactly one child element, found more than one");
-        return error.WrongCount;
+    if (g.elems.len == 0) {
+        e.report(.missing, g.name, null, "expected exactly one child element, found none");
+        return error.Missing;
+    }
+    if (g.elems.len > 1) {
+        e.report(.too_many, g.name, null, "expected exactly one child element, found more than one");
+        return error.TooMany;
     }
     g.elems[0].visited = true;
     return g.elems[0];
 }
 
-/// The child element named `child_name`, or null. Fails with `error.WrongCount` if there are more.
-pub fn childOpt(e: *Elem, child_name: []const u8) Error!?*Elem {
+/// The child element named `child_name`, or null. Fails with `error.TooMany` if there are more.
+pub fn childOpt(e: *Elem, child_name: []const u8) ChildOptError!?*Elem {
     const g = try e.useGroup(child_name);
     if (g.elems.len > 1) {
-        e.report(.wrong_count, g.name, null, "expected at most one child element, found more than one");
-        return error.WrongCount;
+        e.report(.too_many, g.name, null, "expected at most one child element, found more than one");
+        return error.TooMany;
     }
     if (g.elems.len == 0) return null;
     g.elems[0].visited = true;
@@ -192,7 +221,7 @@ pub fn childOpt(e: *Elem, child_name: []const u8) Error!?*Elem {
 
 /// All child elements named `child_name` in document order (possibly none).
 /// The slice is owned by the document.
-pub fn children(e: *Elem, child_name: []const u8) Error![]const *Elem {
+pub fn children(e: *Elem, child_name: []const u8) ChildrenError![]const *Elem {
     const g = try e.useGroup(child_name);
     for (g.elems) |c| c.visited = true;
     return g.elems;
@@ -201,26 +230,26 @@ pub fn children(e: *Elem, child_name: []const u8) Error![]const *Elem {
 // ------------------------------------------------------------------ text
 
 /// Text of the element parsed as `T`. Strings are borrowed.
-/// Fails with `error.WrongCount` if the element has child elements.
-pub fn text(e: *Elem, comptime T: type) Error!T {
+/// Fails with `error.HasChildren` if the element has child elements.
+pub fn text(e: *Elem, comptime T: type) TextError!T {
     try e.useText();
     return e.convert(T, null, e.text_content, null);
 }
 
 /// Text of the element parsed by `parser: fn ([]const u8) E!R`.
-pub fn textWith(e: *Elem, comptime parser: anytype) WithResult(parser) {
+pub fn textWith(e: *Elem, comptime parser: anytype) WithResult(TextLookupError, parser) {
     try e.useText();
     return e.callParser(parser, .{e.text_content}, null, e.text_content);
 }
 
 /// Like `text`, but the result is allocated with `gpa` (strings are copied).
-pub fn textAlloc(e: *Elem, gpa: Allocator, comptime T: type) Error!T {
+pub fn textAlloc(e: *Elem, gpa: Allocator, comptime T: type) TextError!T {
     try e.useText();
     return e.convert(T, gpa, e.text_content, null);
 }
 
 /// Text of the element parsed by `parser: fn (Allocator, []const u8) E!R`, which gets `gpa`.
-pub fn textAllocWith(e: *Elem, gpa: Allocator, comptime parser: anytype) WithResult(parser) {
+pub fn textAllocWith(e: *Elem, gpa: Allocator, comptime parser: anytype) WithResult(TextLookupError, parser) {
     try e.useText();
     return e.callParser(parser, .{ gpa, e.text_content }, null, e.text_content);
 }
@@ -237,14 +266,15 @@ pub fn ignoreAll(e: *Elem) void {
 
 // ------------------------------------------------------------------ internals
 
-fn WithResult(comptime parser: anytype) type {
+/// Result of a `...With` function: errors of the lookup and of the custom parser.
+fn WithResult(comptime LookupError: type, comptime parser: anytype) type {
     const r = value.ParserResult(parser);
-    return (Error || r[0])!r[1];
+    return (LookupError || r[0])!r[1];
 }
 
-fn OptWithResult(comptime parser: anytype) type {
+fn OptWithResult(comptime LookupError: type, comptime parser: anytype) type {
     const r = value.ParserResult(parser);
-    return (Error || r[0])!?r[1];
+    return (LookupError || r[0])!?r[1];
 }
 
 fn report(e: *Elem, kind: Diagnostics.Kind, selector: ?[]const u8, input: ?[]const u8, message: []const u8) void {
@@ -261,7 +291,7 @@ fn reportDocumentOutOfMemory(e: *Elem) error{OutOfMemory} {
 }
 
 /// Records that `wanted` (which doesn't exist) was requested. Returns the stored copy of `wanted`.
-fn useMissing(e: *Elem, kind: @FieldType(Missing, "kind"), wanted: []const u8, message: []const u8) Error![]const u8 {
+fn useMissing(e: *Elem, kind: @FieldType(Missing, "kind"), wanted: []const u8, message: []const u8) error{ AlreadyUsed, OutOfMemory }![]const u8 {
     var it = e.missing;
     while (it) |m| : (it = m.next) {
         if (m.kind == kind and std.mem.eql(u8, m.name, wanted)) {
@@ -281,7 +311,7 @@ fn useMissing(e: *Elem, kind: @FieldType(Missing, "kind"), wanted: []const u8, m
 const attr_used_message = "attribute was already used";
 
 /// Marks attribute `attr_name` as used. Returns null and remembers the name if it doesn't exist.
-fn optionalAttr(e: *Elem, attr_name: []const u8) Error!?*Attr {
+fn optionalAttr(e: *Elem, attr_name: []const u8) AttrOptLookupError!?*Attr {
     if (e.findAttr(attr_name)) |a| {
         if (a.used) {
             e.report(.already_used, a.local_name, null, attr_used_message);
@@ -294,7 +324,7 @@ fn optionalAttr(e: *Elem, attr_name: []const u8) Error!?*Attr {
     return null;
 }
 
-fn requiredAttr(e: *Elem, attr_name: []const u8) Error!*Attr {
+fn requiredAttr(e: *Elem, attr_name: []const u8) AttrLookupError!*Attr {
     if (e.findAttr(attr_name)) |a| {
         if (a.used) {
             e.report(.already_used, a.local_name, null, attr_used_message);
@@ -304,14 +334,14 @@ fn requiredAttr(e: *Elem, attr_name: []const u8) Error!*Attr {
         return a;
     }
     const stored = try e.useMissing(.attr, attr_name, attr_used_message);
-    e.report(.wrong_count, stored, null, "attribute is missing");
-    return error.WrongCount;
+    e.report(.missing, stored, null, "attribute is missing");
+    return error.Missing;
 }
 
 const GroupUse = struct { name: []const u8, elems: []const *Elem };
 
 /// Marks the group of children named `child_name` as used (or remembers the missing name).
-fn useGroup(e: *Elem, child_name: []const u8) Error!GroupUse {
+fn useGroup(e: *Elem, child_name: []const u8) ChildrenError!GroupUse {
     const message = "child elements were already used";
     if (e.findGroup(child_name)) |g| {
         if (g.used) {
@@ -324,20 +354,20 @@ fn useGroup(e: *Elem, child_name: []const u8) Error!GroupUse {
     return .{ .name = try e.useMissing(.child, child_name, message), .elems = &.{} };
 }
 
-fn useText(e: *Elem) Error!void {
+fn useText(e: *Elem) TextLookupError!void {
     if (e.text_used) {
         e.report(.already_used, null, null, "text was already used");
         return error.AlreadyUsed;
     }
     e.text_used = true;
     if (e.groups.len > 0) {
-        e.report(.wrong_count, null, null, "element has child elements, so it has no text");
-        return error.WrongCount;
+        e.report(.has_children, null, null, "element has child elements, so it has no text");
+        return error.HasChildren;
     }
 }
 
 /// `gpa` is `null` (borrowed result) or an `Allocator` (owned result), see `value.parse`.
-fn convert(e: *Elem, comptime T: type, gpa: anytype, s: []const u8, selector: ?[]const u8) Error!T {
+fn convert(e: *Elem, comptime T: type, gpa: anytype, s: []const u8, selector: ?[]const u8) ValueError!T {
     var failure: value.Failure = undefined;
     return value.parse(T, gpa, s, &failure) catch switch (failure) {
         .out_of_memory => {
@@ -351,7 +381,7 @@ fn convert(e: *Elem, comptime T: type, gpa: anytype, s: []const u8, selector: ?[
     };
 }
 
-fn callParser(e: *Elem, comptime parser: anytype, args: anytype, selector: ?[]const u8, s: []const u8) WithResult(parser) {
+fn callParser(e: *Elem, comptime parser: anytype, args: anytype, selector: ?[]const u8, s: []const u8) WithResult(error{}, parser) {
     const R = @typeInfo(@TypeOf(parser)).@"fn".return_type.?;
     if (@typeInfo(R) == .error_union) {
         return @call(.auto, parser, args) catch |err| {

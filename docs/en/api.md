@@ -125,51 +125,52 @@ pub fn path(e: *const Elem) Path;
 
 ```zig
 // Borrowed result (no allocation; strings point into the input or into the document).
-pub fn attr(e: *Elem, comptime T: type, attr_name: []const u8) Error!T;
-pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) Error!?T;
+pub fn attr(e: *Elem, comptime T: type, attr_name: []const u8) AttrError!T;
+pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) AttrOptError!?T;
 
 // Custom parser without allocation: `parser: fn ([]const u8) E!R`.
-pub fn attrWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) (Error || E)!R;
-pub fn attrOptWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) (Error || E)!?R;
+pub fn attrWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) (AttrLookupError || E)!R;
+pub fn attrOptWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) (AttrOptLookupError || E)!?R;
 
 // Result allocated with the caller's allocator (strings are copied).
-pub fn attrAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) Error!T;
-pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) Error!?T;
+pub fn attrAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) AttrError!T;
+pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) AttrOptError!?T;
 
 // Custom parser that allocates: `parser: fn (Allocator, []const u8) E!R`, gets `gpa`.
-pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) (Error || E)!R;
-pub fn attrOptAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) (Error || E)!?R;
+pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) (AttrLookupError || E)!R;
+pub fn attrOptAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) (AttrOptLookupError || E)!?R;
 ```
 
-- `attr*` fails with `error.WrongCount` if the attribute is missing.
+- `attr*` fails with `error.Missing` if the attribute is missing.
 - `attrOpt*` returns `null` if the attribute is missing.
 
 #### Child elements
 
 ```zig
-pub fn child(e: *Elem, child_name: []const u8) Error!*Elem;            // exactly one
-pub fn childOpt(e: *Elem, child_name: []const u8) Error!?*Elem;        // zero or one
-pub fn children(e: *Elem, child_name: []const u8) Error![]const *Elem; // any number, document order
+pub fn child(e: *Elem, child_name: []const u8) ChildError!*Elem;               // exactly one
+pub fn childOpt(e: *Elem, child_name: []const u8) ChildOptError!?*Elem;        // zero or one
+pub fn children(e: *Elem, child_name: []const u8) ChildrenError![]const *Elem; // any number, document order
 ```
 
-- `child` fails with `error.WrongCount` unless there is exactly one child with that name.
-- `childOpt` fails with `error.WrongCount` if there are two or more.
+- `child` fails with `error.Missing` if there is no child with that name and with `error.TooMany`
+  if there are two or more.
+- `childOpt` fails with `error.TooMany` if there are two or more.
 - The returned slice and elements are owned by the document (valid until `deinit`).
 
 #### Text
 
 ```zig
-pub fn text(e: *Elem, comptime T: type) Error!T;
-pub fn textWith(e: *Elem, comptime parser: anytype) (Error || E)!R;
-pub fn textAlloc(e: *Elem, gpa: Allocator, comptime T: type) Error!T;
-pub fn textAllocWith(e: *Elem, gpa: Allocator, comptime parser: anytype) (Error || E)!R;
+pub fn text(e: *Elem, comptime T: type) TextError!T;
+pub fn textWith(e: *Elem, comptime parser: anytype) (TextLookupError || E)!R;
+pub fn textAlloc(e: *Elem, gpa: Allocator, comptime T: type) TextError!T;
+pub fn textAllocWith(e: *Elem, gpa: Allocator, comptime parser: anytype) (TextLookupError || E)!R;
 ```
 
 Text is the concatenation of all text and CDATA sections directly inside the element. Comments
 and processing instructions between them are dropped. Whitespace is kept as it is (no trimming).
 An empty element (`<a/>`, `<a></a>`) has the text `""`.
 
-Calling `text*` on an element that has child elements fails with `error.WrongCount`.
+Calling `text*` on an element that has child elements fails with `error.HasChildren`.
 (UseData.Xml returns `""` there; asking for text in that place is almost certainly a bug.)
 
 #### Ignoring
@@ -183,18 +184,33 @@ pub fn ignoreAll(e: *Elem) void;
 #### Error set
 
 ```zig
+/// All errors of the extraction functions; also available as `use_xml.Error`.
 pub const Error = error{
-    WrongCount,   // missing attribute/child, or too many children
+    Missing,      // a required attribute or child element doesn't exist
+    TooMany,      // more child elements with the name than expected
+    HasChildren,  // text was requested from an element with child elements
     AlreadyUsed,  // the same attribute / child name / text was requested twice
     InvalidValue, // a built-in parser or a `parseXml` hook rejected the string
     OutOfMemory,  // see "Out of memory"
 };
+
+// Each function returns only the errors that can happen, so `switch` on them stays short.
+pub const ChildError = error{ Missing, TooMany, AlreadyUsed, OutOfMemory };     // child
+pub const ChildOptError = error{ TooMany, AlreadyUsed, OutOfMemory };           // childOpt
+pub const ChildrenError = error{ AlreadyUsed, OutOfMemory };                    // children
+pub const AttrLookupError = error{ Missing, AlreadyUsed, OutOfMemory };         // finding a required attribute
+pub const AttrOptLookupError = error{ AlreadyUsed, OutOfMemory };               // finding an optional attribute
+pub const TextLookupError = error{ HasChildren, AlreadyUsed };                  // finding the text
+pub const ValueError = error{ InvalidValue, OutOfMemory };                      // built-in value parsing
+pub const AttrError = AttrLookupError || ValueError;                            // attr, attrAlloc
+pub const AttrOptError = AttrOptLookupError || ValueError;                      // attrOpt, attrOptAlloc
+pub const TextError = TextLookupError || ValueError;                            // text, textAlloc
 ```
 
 Custom parsers (`...With`) may return any error (or no error at all). The error is passed through
 unchanged and is recorded in `doc.diagnostics()` (the message is the error name).
 Errors of `parseXml` / `parseXmlAlloc` hooks are returned as `error.InvalidValue` (except
-`error.OutOfMemory`), so that `attr(T, …)` always has the error set `Error`. The original error
+`error.OutOfMemory`), so that `attr(T, …)` always has the error set `AttrError`. The original error
 name is the message in `doc.diagnostics()`.
 
 ## Usage rules
@@ -346,7 +362,9 @@ pub const Diagnostics = struct {
 
     pub const Kind = enum {
         none,
-        wrong_count,
+        missing,
+        too_many,
+        has_children,
         already_used,
         invalid_value,
         unused_data,
@@ -422,7 +440,8 @@ The example `examples/m7/m7.zig` shows the same with a writer passed in by the c
 2. Floats: only the plain decimal form without exponent.
 3. `bool`: only `true` / `false`, case-sensitive.
 4. `Timestamp`: only the `Z` suffix, no offsets.
-5. `text*` on an element with child elements fails with `error.WrongCount`.
+5. `text*` on an element with child elements fails with `error.HasChildren` (originally
+   `error.WrongCount`, split into `Missing` / `TooMany` / `HasChildren` on 2026-11-24).
 6. Separate functions for the variants (no options struct).
 7. Names that were requested but don't exist are remembered, and a second request fails with
    `error.AlreadyUsed`. That is why lookups by name may return `error.OutOfMemory`.

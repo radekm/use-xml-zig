@@ -26,7 +26,12 @@ message: []const u8 = "",
 /// What went wrong. `none` means no error was recorded.
 pub const Kind = enum {
     none,
-    wrong_count,
+    /// `error.Missing`: a required attribute or child element doesn't exist.
+    missing,
+    /// `error.TooMany`: more child elements than expected.
+    too_many,
+    /// `error.HasChildren`: text of an element with child elements.
+    has_children,
     already_used,
     invalid_value,
     unused_data,

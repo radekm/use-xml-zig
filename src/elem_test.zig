@@ -92,30 +92,30 @@ test "prefixes and default namespace are ignored" {
 test "multiple children when single child is expected" {
     var f = try Fixture.init("<person><name>Peter</name><name>James</name></person>");
     defer f.deinit();
-    try t.expectError(error.WrongCount, f.root().child("name"));
-    try f.expectDiag(.wrong_count, "/person: \"name\": expected exactly one child element, found more than one");
+    try t.expectError(error.TooMany, f.root().child("name"));
+    try f.expectDiag(.too_many, "/person: \"name\": expected exactly one child element, found more than one");
 }
 
 test "multiple children when at most one child is expected" {
     var f = try Fixture.init("<person><name>Peter</name><name>James</name></person>");
     defer f.deinit();
-    try t.expectError(error.WrongCount, f.root().childOpt("name"));
-    try f.expectDiag(.wrong_count, "/person: \"name\": expected at most one child element, found more than one");
+    try t.expectError(error.TooMany, f.root().childOpt("name"));
+    try f.expectDiag(.too_many, "/person: \"name\": expected at most one child element, found more than one");
 }
 
 test "no child when one child is expected" {
     var f = try Fixture.init("<dog></dog>");
     defer f.deinit();
-    try t.expectError(error.WrongCount, f.root().child("name"));
-    try f.expectDiag(.wrong_count, "/dog: \"name\": expected exactly one child element, found none");
+    try t.expectError(error.Missing, f.root().child("name"));
+    try f.expectDiag(.missing, "/dog: \"name\": expected exactly one child element, found none");
     try t.expectEqual(f.root(), f.doc.diagnostics().elem.?);
 }
 
 test "no attribute when one attribute is expected" {
     var f = try Fixture.init("<city></city>");
     defer f.deinit();
-    try t.expectError(error.WrongCount, f.root().attr([]const u8, "name"));
-    try f.expectDiag(.wrong_count, "/city: \"name\": attribute is missing");
+    try t.expectError(error.Missing, f.root().attr([]const u8, "name"));
+    try f.expectDiag(.missing, "/city: \"name\": attribute is missing");
 }
 
 // ------------------------------------------------------------------ usage rules
@@ -153,7 +153,7 @@ test "requesting a missing name twice fails" {
     try t.expectError(error.AlreadyUsed, a.childOpt("x"));
     try f.expectDiag(.already_used, "/a: \"x\": child elements were already used");
 
-    try t.expectError(error.WrongCount, a.attr([]const u8, "y"));
+    try t.expectError(error.Missing, a.attr([]const u8, "y"));
     try t.expectError(error.AlreadyUsed, a.attrOpt([]const u8, "y"));
 }
 
@@ -161,7 +161,7 @@ test "the name passed in may be a temporary buffer" {
     var f = try Fixture.init("<a/>");
     defer f.deinit();
     var name_buf = "zz".*;
-    try t.expectError(error.WrongCount, f.root().attr([]const u8, &name_buf));
+    try t.expectError(error.Missing, f.root().attr([]const u8, &name_buf));
     name_buf = "qq".*;
     try t.expectEqualStrings("zz", f.doc.diagnostics().selector.?);
     try t.expectError(error.AlreadyUsed, f.root().attr([]const u8, "zz"));
@@ -170,8 +170,8 @@ test "the name passed in may be a temporary buffer" {
 test "text of an element with child elements" {
     var f = try Fixture.init("<a> <b/> </a>");
     defer f.deinit();
-    try t.expectError(error.WrongCount, f.root().text([]const u8));
-    try f.expectDiag(.wrong_count, "/a: element has child elements, so it has no text");
+    try t.expectError(error.HasChildren, f.root().text([]const u8));
+    try f.expectDiag(.has_children, "/a: element has child elements, so it has no text");
 }
 
 test "text keeps whitespace and empty elements have empty text" {
@@ -374,6 +374,30 @@ test "out of memory is recorded in diagnostics" {
         var buf: [64]u8 = undefined;
         try t.expectEqualStrings("/a: document out of memory", try std.fmt.bufPrint(&buf, "{f}", .{doc.diagnostics()}));
     }
+}
+
+test "each function returns only the errors that can happen" {
+    var f = try Fixture.init("<a x=\"1\"><b/><b/></a>");
+    defer f.deinit();
+    const a = f.root();
+    // These switches are exhaustive, so they don't compile if an error set gets bigger.
+    _ = a.child("b") catch |err| switch (err) {
+        error.Missing, error.TooMany, error.AlreadyUsed, error.OutOfMemory => null,
+    };
+    _ = a.childOpt("c") catch |err| switch (err) {
+        error.TooMany, error.AlreadyUsed, error.OutOfMemory => null,
+    };
+    _ = a.children("d") catch |err| switch (err) {
+        error.AlreadyUsed, error.OutOfMemory => null,
+    };
+    _ = a.attrOpt(u8, "x") catch |err| switch (err) {
+        error.AlreadyUsed, error.InvalidValue, error.OutOfMemory => null,
+    };
+    _ = a.text([]const u8) catch |err| switch (err) {
+        error.HasChildren, error.AlreadyUsed, error.InvalidValue, error.OutOfMemory => null,
+    };
+    // The alias in the root module.
+    try t.expect(@import("root.zig").Error == Elem.Error);
 }
 
 // ------------------------------------------------------------------ built-in value types

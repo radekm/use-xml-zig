@@ -177,6 +177,6 @@ test "expectAllUsed describes the first unused item" {
 test "children of an element with a failed child() are not reported" {
     var doc = try Document.parse(t.allocator, "<r><a>1</a><a>2</a></r>", .{});
     defer doc.deinit();
-    try t.expectError(error.WrongCount, doc.root().child("a"));
+    try t.expectError(error.TooMany, doc.root().child("a"));
     try expectReport(&doc, "");
 }

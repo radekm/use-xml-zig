@@ -77,14 +77,14 @@ The steps are always the same:
 
 ## Reading the document
 
-| Function                     | Returns                     | Fails with `WrongCount` when    |
-|------------------------------|-----------------------------|---------------------------------|
-| `e.attr(T, "a")`             | value of attribute `a`      | the attribute is missing        |
-| `e.attrOpt(T, "a")`          | value or `null`             | —                               |
-| `e.child("c")`               | the only child `<c>`        | there isn't exactly one `<c>`   |
-| `e.childOpt("c")`            | the child `<c>` or `null`   | there are two or more `<c>`     |
-| `e.children("c")`            | all children `<c>` (slice)  | —                               |
-| `e.text(T)`                  | text of the element         | the element has child elements  |
+| Function                     | Returns                     | Fails when                                    |
+|------------------------------|-----------------------------|-----------------------------------------------|
+| `e.attr(T, "a")`             | value of attribute `a`      | `Missing`: the attribute is missing           |
+| `e.attrOpt(T, "a")`          | value or `null`             | —                                             |
+| `e.child("c")`               | the only child `<c>`        | `Missing`: no `<c>`; `TooMany`: two or more   |
+| `e.childOpt("c")`            | the child `<c>` or `null`   | `TooMany`: two or more `<c>`                  |
+| `e.children("c")`            | all children `<c>` (slice)  | —                                             |
+| `e.text(T)`                  | text of the element         | `HasChildren`: the element has child elements |
 | `e.ignoreAll()`              | marks everything in `e` as used | —                           |
 
 A few rules:
@@ -186,7 +186,9 @@ Zig errors can't carry data, so the details are stored separately:
 
 | Error            | `Diagnostics.kind` | Example of `"{f}"` |
 |------------------|--------------------|--------------------|
-| `WrongCount`     | `wrong_count`      | `/person: "name": expected exactly one child element, found none` |
+| `Missing`        | `missing`          | `/person: "name": expected exactly one child element, found none` |
+| `TooMany`        | `too_many`         | `/person: "name": expected at most one child element, found more than one` |
+| `HasChildren`    | `has_children`     | `/person: element has child elements, so it has no text` |
 | `AlreadyUsed`    | `already_used`     | `/a: "x": attribute was already used` |
 | `InvalidValue`   | `invalid_value`    | `/server: "port": expected integer (u16) (input: "80x")` |
 | custom parser's  | `invalid_value`    | `/a: "d": UnknownColor (input: "blue")` |

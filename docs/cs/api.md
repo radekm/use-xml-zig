@@ -125,51 +125,52 @@ pub fn path(e: *const Elem) Path;
 
 ```zig
 // Borrowed result (no allocation; strings point into the input or into the document).
-pub fn attr(e: *Elem, comptime T: type, attr_name: []const u8) Error!T;
-pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) Error!?T;
+pub fn attr(e: *Elem, comptime T: type, attr_name: []const u8) AttrError!T;
+pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) AttrOptError!?T;
 
 // Custom parser without allocation: `parser: fn ([]const u8) E!R`.
-pub fn attrWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) (Error || E)!R;
-pub fn attrOptWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) (Error || E)!?R;
+pub fn attrWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) (AttrLookupError || E)!R;
+pub fn attrOptWith(e: *Elem, attr_name: []const u8, comptime parser: anytype) (AttrOptLookupError || E)!?R;
 
 // Result allocated with the caller's allocator (strings are copied).
-pub fn attrAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) Error!T;
-pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) Error!?T;
+pub fn attrAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) AttrError!T;
+pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) AttrOptError!?T;
 
 // Custom parser that allocates: `parser: fn (Allocator, []const u8) E!R`, gets `gpa`.
-pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) (Error || E)!R;
-pub fn attrOptAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) (Error || E)!?R;
+pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) (AttrLookupError || E)!R;
+pub fn attrOptAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, comptime parser: anytype) (AttrOptLookupError || E)!?R;
 ```
 
-- `attr*` selže s `error.WrongCount`, když atribut chybí.
+- `attr*` selže s `error.Missing`, když atribut chybí.
 - `attrOpt*` vrátí `null`, když atribut chybí.
 
 #### Podelementy
 
 ```zig
-pub fn child(e: *Elem, child_name: []const u8) Error!*Elem;            // exactly one
-pub fn childOpt(e: *Elem, child_name: []const u8) Error!?*Elem;        // zero or one
-pub fn children(e: *Elem, child_name: []const u8) Error![]const *Elem; // any number, document order
+pub fn child(e: *Elem, child_name: []const u8) ChildError!*Elem;               // exactly one
+pub fn childOpt(e: *Elem, child_name: []const u8) ChildOptError!?*Elem;        // zero or one
+pub fn children(e: *Elem, child_name: []const u8) ChildrenError![]const *Elem; // any number, document order
 ```
 
-- `child` selže s `error.WrongCount`, pokud neexistuje právě jeden podelement s daným jménem.
-- `childOpt` selže s `error.WrongCount`, pokud jsou dva nebo víc.
+- `child` selže s `error.Missing`, pokud podelement s daným jménem neexistuje, a s
+  `error.TooMany`, pokud jsou dva nebo víc.
+- `childOpt` selže s `error.TooMany`, pokud jsou dva nebo víc.
 - Vrácený slice i elementy vlastní dokument (platí do `deinit`).
 
 #### Text
 
 ```zig
-pub fn text(e: *Elem, comptime T: type) Error!T;
-pub fn textWith(e: *Elem, comptime parser: anytype) (Error || E)!R;
-pub fn textAlloc(e: *Elem, gpa: Allocator, comptime T: type) Error!T;
-pub fn textAllocWith(e: *Elem, gpa: Allocator, comptime parser: anytype) (Error || E)!R;
+pub fn text(e: *Elem, comptime T: type) TextError!T;
+pub fn textWith(e: *Elem, comptime parser: anytype) (TextLookupError || E)!R;
+pub fn textAlloc(e: *Elem, gpa: Allocator, comptime T: type) TextError!T;
+pub fn textAllocWith(e: *Elem, gpa: Allocator, comptime parser: anytype) (TextLookupError || E)!R;
 ```
 
 Text je spojení všech textových a CDATA sekcí přímo uvnitř elementu. Komentáře a processing
 instructions mezi nimi se zahodí. Bílé znaky zůstávají tak, jak jsou (žádné ořezávání). Prázdný
 element (`<a/>`, `<a></a>`) má text `""`.
 
-Volání `text*` na elementu, který má podelementy, selže s `error.WrongCount`.
+Volání `text*` na elementu, který má podelementy, selže s `error.HasChildren`.
 (UseData.Xml tam vrací `""`; ptát se na tom místě na text je téměř jistě chyba v kódu.)
 
 #### Ignorování
@@ -183,18 +184,33 @@ pub fn ignoreAll(e: *Elem) void;
 #### Množina chyb
 
 ```zig
+/// All errors of the extraction functions; also available as `use_xml.Error`.
 pub const Error = error{
-    WrongCount,   // missing attribute/child, or too many children
+    Missing,      // a required attribute or child element doesn't exist
+    TooMany,      // more child elements with the name than expected
+    HasChildren,  // text was requested from an element with child elements
     AlreadyUsed,  // the same attribute / child name / text was requested twice
     InvalidValue, // a built-in parser or a `parseXml` hook rejected the string
     OutOfMemory,  // see "Out of memory"
 };
+
+// Each function returns only the errors that can happen, so `switch` on them stays short.
+pub const ChildError = error{ Missing, TooMany, AlreadyUsed, OutOfMemory };     // child
+pub const ChildOptError = error{ TooMany, AlreadyUsed, OutOfMemory };           // childOpt
+pub const ChildrenError = error{ AlreadyUsed, OutOfMemory };                    // children
+pub const AttrLookupError = error{ Missing, AlreadyUsed, OutOfMemory };         // finding a required attribute
+pub const AttrOptLookupError = error{ AlreadyUsed, OutOfMemory };               // finding an optional attribute
+pub const TextLookupError = error{ HasChildren, AlreadyUsed };                  // finding the text
+pub const ValueError = error{ InvalidValue, OutOfMemory };                      // built-in value parsing
+pub const AttrError = AttrLookupError || ValueError;                            // attr, attrAlloc
+pub const AttrOptError = AttrOptLookupError || ValueError;                      // attrOpt, attrOptAlloc
+pub const TextError = TextLookupError || ValueError;                            // text, textAlloc
 ```
 
 Vlastní parsery (`...With`) smí vracet libovolnou chybu (nebo žádnou). Chyba projde beze změny
 a zaznamená se do `doc.diagnostics()` (zprávou je název chyby).
 Chyby hooků `parseXml` / `parseXmlAlloc` se vrací jako `error.InvalidValue` (kromě
-`error.OutOfMemory`), aby `attr(T, …)` měla vždy množinu chyb `Error`. Původní název chyby je
+`error.OutOfMemory`), aby `attr(T, …)` měla vždy množinu chyb `AttrError`. Původní název chyby je
 zprávou v `doc.diagnostics()`.
 
 ## Pravidla použití
@@ -344,7 +360,9 @@ pub const Diagnostics = struct {
 
     pub const Kind = enum {
         none,
-        wrong_count,
+        missing,
+        too_many,
+        has_children,
         already_used,
         invalid_value,
         unused_data,
@@ -419,7 +437,8 @@ Příklad `examples/m7/m7.zig` ukazuje totéž s writerem, který předá volaj�
 2. Floaty: jen běžný desetinný zápis bez exponentu.
 3. `bool`: jen `true` / `false`, záleží na velikosti písmen.
 4. `Timestamp`: jen přípona `Z`, žádné offsety.
-5. `text*` na elementu s podelementy selže s `error.WrongCount`.
+5. `text*` na elementu s podelementy selže s `error.HasChildren` (původně `error.WrongCount`,
+   24. 11. 2026 rozdělená na `Missing` / `TooMany` / `HasChildren`).
 6. Samostatné funkce pro varianty (žádná struktura s volbami).
 7. Jména, na která se někdo ptal, ale neexistují, si dokument pamatuje a druhé vyžádání selže
    s `error.AlreadyUsed`. Proto vyhledávání podle jména smí vrátit `error.OutOfMemory`.
