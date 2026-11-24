@@ -79,6 +79,8 @@ pub const Document = struct {
         /// Filled in when `parse` fails with error.InvalidXml.
         diagnostics: ?*ParseDiagnostics = null,
         /// Maximum element nesting depth. Deeper input fails with error.InvalidXml.
+        /// The root element has depth 1, so 0 rejects every document.
+        /// Printing paths (`Elem.path`, diagnostics) takes time quadratic in the depth.
         max_depth: u32 = 256,
     };
 
@@ -115,6 +117,7 @@ pub fn parent(e: *const Elem) ?*Elem;
 /// Index among siblings with the same name (0-based). Used in paths: /company/address[0].
 pub fn index(e: *const Elem) u32;
 /// Printable path from the root, e.g. `/company/address[0]/city[0]` (use with "{f}").
+/// Printing doesn't allocate and takes time quadratic in the depth of `e`.
 pub fn path(e: *const Elem) Path;
 ```
 
@@ -265,7 +268,7 @@ Built-in types:
 | signed / unsigned ints  | optional sign `+` / `-`, then one or more decimal digits; leading zeros are allowed (`007`, `+5`, `-12`); no `_`, no whitespace; must fit into `T` |
 | `f32`, `f64`            | optional sign, digits, optionally `.` followed by digits (`1`, `-0.5`, `+007.25`); no exponent, no `inf` / `nan`, no hexadecimal form, no `.5` or `5.` |
 | `bool`                  | exactly `true` or `false` (case-sensitive) |
-| `enum`                  | exactly the name of one of the tags (`@tagName`) |
+| `enum`                  | exactly the name of one of the tags (`@tagName`); enums with more than about 1000 tags don't compile (the error message lists all tags), use `attrWith` with `use_xml.parse.enumTag` |
 | `use_xml.Timestamp`         | see below |
 | `?T`                    | not allowed. Use the `Opt` variants instead. |
 

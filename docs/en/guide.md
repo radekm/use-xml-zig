@@ -236,8 +236,10 @@ unused item in `doc.diagnostics()`.
 - Comments and processing instructions are skipped.
 - Not supported (rejected as `InvalidXml`): `<!DOCTYPE …>` and custom entities, mixed content
   (text next to child elements), other encodings.
-- Elements may be nested at most `Options.max_depth` levels deep (default 256). The parser doesn't
-  use recursion, so even a large limit can't overflow the stack.
+- Elements may be nested at most `Options.max_depth` levels deep (default 256; the root has depth
+  1, so 0 rejects every document). The parser doesn't use recursion, so even a large limit can't
+  overflow the stack. Printing an element path takes time quadratic in its depth, so with a very
+  large limit (hundreds of thousands) error messages about deep elements get slow.
 
 ## Differences from UseData.Xml
 

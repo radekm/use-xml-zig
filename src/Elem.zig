@@ -84,6 +84,7 @@ pub fn index(e: *const Elem) u32 {
 }
 
 /// Printable path from the root, e.g. `/company/address[0]/city[0]` (use with "{f}").
+/// Printing doesn't allocate and takes time quadratic in the depth of `e`.
 pub fn path(e: *const Elem) Path {
     return .{ .elem = e };
 }

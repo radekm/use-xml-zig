@@ -79,6 +79,8 @@ pub const Document = struct {
         /// Filled in when `parse` fails with error.InvalidXml.
         diagnostics: ?*ParseDiagnostics = null,
         /// Maximum element nesting depth. Deeper input fails with error.InvalidXml.
+        /// The root element has depth 1, so 0 rejects every document.
+        /// Printing paths (`Elem.path`, diagnostics) takes time quadratic in the depth.
         max_depth: u32 = 256,
     };
 
@@ -115,6 +117,7 @@ pub fn parent(e: *const Elem) ?*Elem;
 /// Index among siblings with the same name (0-based). Used in paths: /company/address[0].
 pub fn index(e: *const Elem) u32;
 /// Printable path from the root, e.g. `/company/address[0]/city[0]` (use with "{f}").
+/// Printing doesn't allocate and takes time quadratic in the depth of `e`.
 pub fn path(e: *const Elem) Path;
 ```
 
@@ -264,7 +267,7 @@ Vestavěné typy:
 | celá čísla se znaménkem i bez | volitelné znaménko `+` / `-`, pak jedna nebo více desítkových číslic; úvodní nuly jsou povoleny (`007`, `+5`, `-12`); žádné `_`, žádné bílé znaky; musí se vejít do `T` |
 | `f32`, `f64`              | volitelné znaménko, číslice, volitelně `.` následovaná číslicemi (`1`, `-0.5`, `+007.25`); žádný exponent, žádné `inf` / `nan`, žádný šestnáctkový tvar, žádné `.5` ani `5.` |
 | `bool`                    | přesně `true` nebo `false` (záleží na velikosti písmen) |
-| `enum`                    | přesně jméno jednoho z tagů (`@tagName`) |
+| `enum`                    | přesně jméno jednoho z tagů (`@tagName`); enumy s víc než zhruba 1000 tagy nejdou přeložit (chybová zpráva vypisuje všechny tagy), použij `attrWith` s `use_xml.parse.enumTag` |
 | `use_xml.Timestamp`           | viz níže |
 | `?T`                      | není povoleno. Použij varianty `Opt`. |
 

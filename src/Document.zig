@@ -16,6 +16,8 @@ pub const Options = struct {
     /// Filled in when `parse` fails with `error.InvalidXml`.
     diagnostics: ?*ParseDiagnostics = null,
     /// Maximum element nesting depth. Deeper input fails with error.InvalidXml.
+    /// The root element has depth 1, so 0 rejects every document.
+    /// Printing paths (`Elem.path`, diagnostics) takes time quadratic in the depth.
     max_depth: u32 = 256,
 };
 

@@ -236,8 +236,10 @@ v `doc.diagnostics()`.
 - Komentáře a processing instructions se přeskakují.
 - Nepodporováno (odmítne se jako `InvalidXml`): `<!DOCTYPE …>` a vlastní entity, smíšený obsah
   (text vedle podelementů), jiná kódování.
-- Elementy smí být zanořené nejvýše `Options.max_depth` úrovní (výchozí 256). Parser nepoužívá
-  rekurzi, takže ani velký limit nemůže přetéct zásobník.
+- Elementy smí být zanořené nejvýše `Options.max_depth` úrovní (výchozí 256; kořen má hloubku 1,
+  takže 0 odmítne každý dokument). Parser nepoužívá rekurzi, takže ani velký limit nemůže přetéct
+  zásobník. Výpis cesty k elementu trvá čas kvadratický v jeho hloubce, takže s velmi vysokým
+  limitem (stovky tisíc) jsou chybové zprávy o hluboko zanořených elementech pomalé.
 
 ## Rozdíly oproti UseData.Xml
 
