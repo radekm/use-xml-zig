@@ -153,6 +153,37 @@ test "CDATA with a CR may contain '<' and '&'" {
     try t.expectEqualStrings("\n<b>&amp;\n", doc.root().text_content);
 }
 
+test "character references never expand beyond the reference" {
+    // Code points at the boundaries of UTF-8 lengths, written with the fewest digits.
+    const cases = [_]struct { []const u8, u21 }{
+        .{ "&#9;", 9 },              .{ "&#xA;", 10 },          .{ "&#127;", 0x7F },
+        .{ "&#x7F;", 0x7F },         .{ "&#128;", 0x80 },       .{ "&#x80;", 0x80 },
+        .{ "&#2047;", 0x7FF },       .{ "&#x7FF;", 0x7FF },     .{ "&#2048;", 0x800 },
+        .{ "&#x800;", 0x800 },       .{ "&#65533;", 0xFFFD },   .{ "&#xFFFD;", 0xFFFD },
+        .{ "&#65536;", 0x10000 },    .{ "&#x10000;", 0x10000 }, .{ "&#1114111;", 0x10FFFF },
+        .{ "&#x10FFFF;", 0x10FFFF },
+    };
+    for (cases) |c| {
+        var expected: [4]u8 = undefined;
+        const n = try std.unicode.utf8Encode(c[1], &expected);
+        var text_buf: [32]u8 = undefined;
+        var attr_buf: [32]u8 = undefined;
+        var want_buf: [8]u8 = undefined;
+        // In text, and repeated in an attribute value.
+        const inputs = [_][]const u8{
+            try std.fmt.bufPrint(&text_buf, "<a>{s}</a>", .{c[0]}),
+            try std.fmt.bufPrint(&attr_buf, "<a x='{s}{s}'/>", .{ c[0], c[0] }),
+        };
+        for (inputs, 0..) |input, k| {
+            var doc = try Document.parse(t.allocator, input, .{});
+            defer doc.deinit();
+            const got = if (k == 0) doc.root().text_content else attrValue(doc.root(), "x").?;
+            const want = if (k == 0) expected[0..n] else try std.fmt.bufPrint(&want_buf, "{s}{s}", .{ expected[0..n], expected[0..n] });
+            try t.expectEqualStrings(want, got);
+        }
+    }
+}
+
 test "whitespace" {
     const input = "<a>\n  <b>  </b>\n  <c><![CDATA[ ]]></c>\n  <d/>\n  <e></e>\n</a>";
     var doc = try Document.parse(t.allocator, input, .{});

@@ -640,10 +640,15 @@ const Parser = struct {
     /// Decodes references (not in CDATA), normalises line endings and, for attribute
     /// values, whitespace. `out` must be at least `raw.len` bytes long.
     /// Returns the number of bytes written.
+    ///
+    /// The output is never longer than the input: every step writes at most as many bytes as it
+    /// reads (see `decodeReference` for references).
     fn decode(p: *Parser, raw: []const u8, offset: usize, mode: DecodeMode, out: []u8) Error!usize {
+        std.debug.assert(out.len >= raw.len);
         var i: usize = 0;
         var j: usize = 0;
         while (i < raw.len) {
+            std.debug.assert(j <= i);
             const c = raw[i];
             switch (c) {
                 '\r' => {
@@ -714,7 +719,11 @@ const Parser = struct {
         }
         const c: u21 = @intCast(cp);
         if (!chars.isChar(c)) return p.fail(offset, "character reference to a character not allowed in XML");
-        // `&#x…;` is at least 4 bytes long, so a code point (at most 4 bytes) always fits.
+        // A reference is never shorter than the UTF-8 encoding of its character, so it fits into
+        // `out`: `&#` + digits + `;` is 3 bytes plus the digits, and a character that needs
+        // n > 1 bytes of UTF-8 is at least U+0080 / U+0800 / U+10000, which needs at least
+        // 3 / 4 / 5 decimal or 2 / 3 / 5 hexadecimal digits (plus the `x`).
+        std.debug.assert(out.len >= body.len + 2);
         return std.unicode.utf8Encode(c, out) catch p.fail(offset, "invalid character reference");
     }
 };
