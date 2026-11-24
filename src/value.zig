@@ -12,12 +12,13 @@ pub const Failure = union(enum) {
     out_of_memory,
 };
 
-/// Parses `s` into `T`. When `gpa` is null, strings are borrowed; otherwise they are
-/// copied into `gpa` and user hooks get `gpa` (`parseXmlAlloc`).
-pub fn parse(comptime T: type, gpa: ?Allocator, s: []const u8, failure: *Failure) error{Failed}!T {
+/// Parses `s` into `T`. `gpa` is either `null` (the result may borrow `s`) or an `Allocator`
+/// (the result must not borrow `s`: strings are copied and user hooks must be `parseXmlAlloc`).
+pub fn parse(comptime T: type, gpa: anytype, s: []const u8, failure: *Failure) error{Failed}!T {
+    const owned = comptime isOwned(@TypeOf(gpa));
     if (T == []const u8) {
-        const allocator = gpa orelse return s;
-        return allocator.dupe(u8, s) catch {
+        if (!owned) return s;
+        return gpa.dupe(u8, s) catch {
             failure.* = .out_of_memory;
             return error.Failed;
         };
@@ -58,9 +59,22 @@ fn enumMessage(comptime E: type) []const u8 {
     return message;
 }
 
-fn parseWithHook(comptime T: type, gpa: ?Allocator, s: []const u8, failure: *Failure) error{Failed}!T {
-    const result = if (gpa != null and @hasDecl(T, "parseXmlAlloc"))
-        T.parseXmlAlloc(gpa.?, s)
+fn isOwned(comptime G: type) bool {
+    if (G == Allocator) return true;
+    if (G == @TypeOf(null)) return false;
+    @compileError("expected an Allocator or null, got " ++ @typeName(G));
+}
+
+fn parseWithHook(comptime T: type, gpa: anytype, s: []const u8, failure: *Failure) error{Failed}!T {
+    // `...Alloc` functions promise a result that outlives the document. `parseXml` may return
+    // slices of its input, so it is never used for them.
+    const result = if (comptime isOwned(@TypeOf(gpa)))
+        if (@hasDecl(T, "parseXmlAlloc"))
+            T.parseXmlAlloc(gpa, s)
+        else
+            @compileError(@typeName(T) ++ " has no `parseXmlAlloc`, so it can't be used with `...Alloc` " ++
+                "functions; add `pub fn parseXmlAlloc(Allocator, []const u8) !" ++ @typeName(T) ++
+                "` or use the variant without `Alloc`")
     else if (@hasDecl(T, "parseXml"))
         T.parseXml(s)
     else

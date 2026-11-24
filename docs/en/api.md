@@ -278,6 +278,10 @@ pub fn parseXmlAlloc(gpa: Allocator, s: []const u8) !@This();    // used by ...A
 A hook takes precedence over the built-in parsing (so an enum with `parseXml` is not parsed by tag
 name).
 
+`...Alloc` functions use only `parseXmlAlloc`. A type with a hook but without `parseXmlAlloc` can't
+be used with them (compile error), because `parseXml` may return slices of its input, which would
+not outlive the document. A type with only `parseXmlAlloc` can be used only with `...Alloc`.
+
 The module `use_xml.parse` contains the built-in parsers as plain functions returning
 `error{InvalidValue}!T`, so they can be combined in custom parsers:
 `use_xml.parse.int(u32, s)`, `use_xml.parse.float(f64, s)`, `use_xml.parse.boolean(s)`,

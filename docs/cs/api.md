@@ -276,6 +276,10 @@ pub fn parseXmlAlloc(gpa: Allocator, s: []const u8) !@This();    // used by ...A
 
 Hook má přednost před vestavěným parsováním (enum s `parseXml` se tedy neparsuje podle jména tagu).
 
+Funkce `...Alloc` používají jen `parseXmlAlloc`. Typ s hookem, ale bez `parseXmlAlloc` s nimi
+použít nejde (chyba překladu), protože `parseXml` může vracet řezy svého vstupu, které by
+dokument nepřežily. Typ jen s `parseXmlAlloc` jde použít jen s `...Alloc`.
+
 Modul `use_xml.parse` obsahuje vestavěné parsery jako obyčejné funkce vracející
 `error{InvalidValue}!T`, takže je lze kombinovat ve vlastních parserech:
 `use_xml.parse.int(u32, s)`, `use_xml.parse.float(f64, s)`, `use_xml.parse.boolean(s)`,

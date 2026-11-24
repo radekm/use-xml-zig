@@ -56,6 +56,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 | 2026-11-23 | Vyžádaná jména, která neexistují, se pamatují (druhé vyžádání selže s `AlreadyUsed`); vyhledávání podle jména proto může vrátit `OutOfMemory`. |
 | 2026-11-23 | Chyby extrakce si zaznamenává dokument (`doc.diagnostics()`), takže je zřejmé, že po `doc.deinit()` neplatí; kdo parsuje, nahlásí je předtím. Syntaktické chyby XML jdou do samostatné `ParseDiagnostics` (bez ukazatelů) předané v `Options`. |
 | 2026-11-23 | Licence: zlib. |
+| 2026-11-24 | Funkce `...Alloc` používají jen hook `parseXmlAlloc`; typ jen s `parseXml` s nimi použít nejde (chyba překladu), takže vlastněný výsledek si nikdy nepůjčuje z dokumentu. |
 | 2026-11-23 | Používá se pouze větev `master`. |
 
 ## Milníky

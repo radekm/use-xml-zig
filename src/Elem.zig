@@ -324,7 +324,8 @@ fn useText(e: *Elem) Error!void {
     }
 }
 
-fn convert(e: *Elem, comptime T: type, gpa: ?Allocator, s: []const u8, selector: ?[]const u8) Error!T {
+/// `gpa` is `null` (borrowed result) or an `Allocator` (owned result), see `value.parse`.
+fn convert(e: *Elem, comptime T: type, gpa: anytype, s: []const u8, selector: ?[]const u8) Error!T {
     var failure: value.Failure = undefined;
     return value.parse(T, gpa, s, &failure) catch switch (failure) {
         .out_of_memory => error.OutOfMemory,

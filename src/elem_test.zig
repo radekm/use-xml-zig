@@ -275,6 +275,39 @@ test "parseXml hook" {
     try f.expectDiag(.invalid_value, "/a: \"q\": InvalidPoint (input: \"3\")");
 }
 
+/// A user type with both hooks: `parseXml` borrows the input, `parseXmlAlloc` copies it.
+const Name = struct {
+    s: []const u8,
+    owned: bool,
+
+    pub fn parseXml(s: []const u8) error{EmptyName}!Name {
+        if (s.len == 0) return error.EmptyName;
+        return .{ .s = s, .owned = false };
+    }
+
+    pub fn parseXmlAlloc(gpa: std.mem.Allocator, s: []const u8) error{ EmptyName, OutOfMemory }!Name {
+        if (s.len == 0) return error.EmptyName;
+        return .{ .s = try gpa.dupe(u8, s), .owned = true };
+    }
+};
+
+test "...Alloc variants use parseXmlAlloc" {
+    // `a&amp;b` is decoded into the document's memory, so a borrowed value would dangle.
+    var f = try Fixture.init("<a x=\"a&amp;b\" y=\"c\"><b>d&amp;e</b></a>");
+    const x = try f.root().attrAlloc(t.allocator, Name, "x");
+    defer t.allocator.free(x.s);
+    const y = try f.root().attr(Name, "y");
+    try t.expect(!y.owned);
+    const b = try (try f.root().child("b")).textAlloc(t.allocator, Name);
+    defer t.allocator.free(b.s);
+    f.deinit(); // values outlive the document
+    try t.expect(x.owned and b.owned);
+    try t.expectEqualStrings("a&b", x.s);
+    try t.expectEqualStrings("d&e", b.s);
+    // A type with only `parseXml` (e.g. `Point`) can't be used with `...Alloc`:
+    // `attrAlloc(gpa, Point, "p")` is a compile error.
+}
+
 test "...Alloc variants copy strings" {
     const input = "<a x=\"plain\"><b>text</b></a>";
     var f = try Fixture.init(input);
