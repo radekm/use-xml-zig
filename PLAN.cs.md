@@ -27,7 +27,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
   a `xmlns:*` se přeskakují. Dva sourozenecké elementy (nebo dva atributy jednoho elementu) se
   stejným lokálním jménem a různými prefixy jsou chyba.
 - API pro extrakci: `attr`, `child`, `children`, `text` a jejich varianty (`Opt`, `With`, `Alloc`),
-  `ignoreAll`; podrobné informace o chybách v `doc.diagnostics()` / `ParseDiagnostics`.
+  `ignoreAll`; podrobné informace o chybách v `Diagnostics` (s bufferem od volajícího).
 - Hlášení nepoužitých dat po extrakci (`Document.unused()`, `Document.expectAllUsed()`).
 - Parsery hodnot: řetězce, celá čísla, floaty, `bool`, enumy, `Timestamp` (UTC) a uživatelské typy.
 
@@ -56,6 +56,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 | 2026-11-23 | Vyžádaná jména, která neexistují, se pamatují (druhé vyžádání selže s `AlreadyUsed`); vyhledávání podle jména proto může vrátit `OutOfMemory`. |
 | 2026-11-23 | Chyby extrakce si zaznamenává dokument (`doc.diagnostics()`), takže je zřejmé, že po `doc.deinit()` neplatí; kdo parsuje, nahlásí je předtím. Syntaktické chyby XML jdou do samostatné `ParseDiagnostics` (bez ukazatelů) předané v `Options`. |
 | 2026-11-23 | Licence: zlib. |
+| 2026-11-24 | Diagnostika se předává v `Options.diagnostics` a popis kopíruje do bufferu od volajícího (`Diagnostics.init(&buf)`), takže platí i po `doc.deinit()`. Jeden typ `Diagnostics` pro syntaktické i extrakční chyby (`ParseDiagnostics` a `doc.diagnostics()` jsou zrušené); dlouhá jména/hodnoty se zkracují, popis, který se nevejde, se ořízne (`truncated`). Nahrazuje rozhodnutí z 2026-11-23 o diagnostice uložené v dokumentu. |
 | 2026-11-24 | `doc.diagnostics()` zaznamenává i `error.OutOfMemory`, takže popisuje každou chybu, kterou extrakční funkce vrátí. Druh `document_out_of_memory` = interní paměť dokumentu, `value_out_of_memory` = vytváření hodnoty (alokátor `...Alloc`, vlastní parser, `parseXmlAlloc`). |
 | 2026-11-24 | `error.WrongCount` je rozdělená na `Missing`, `TooMany` a `HasChildren`. Každá extrakční funkce vrací jen chyby, které můžou nastat (`ChildError`, `AttrError`, …); `use_xml.Error` je jejich sjednocení. |
 | 2026-11-24 | Vlastní parser ve funkcích `...With` je funkce, nebo hodnota (či ukazatel) s metodou `parse`; hodnota nese stav známý za běhu. Žádné zvláštní funkce s kontextem. |

@@ -22,7 +22,7 @@ ze Zigu:
 | `children "a" (fun e -> …)` vrací `'T[]`            | `children("a")` vrací `[]const *Elem` (smyčka `for`)            |
 | closure `StringParser<'T>`                          | typ `T` známý v comptime, nebo funkce `fn([]const u8) !T`       |
 | `Dispose` + `ITracer` u každého elementu            | `doc.unused()` / `doc.expectAllUsed()` po extrakci              |
-| výjimky s daty (`WrongCount`, `ParseError`)         | Zig chyby + `doc.diagnostics()` / `ParseDiagnostics` s podrobnostmi |
+| výjimky s daty (`WrongCount`, `ParseError`)         | Zig chyby + `Diagnostics` (buffer od volajícího) s podrobnostmi |
 | GC                                                  | vypůjčené hodnoty, nebo varianty `...Alloc` s alokátorem volajícího |
 
 ## Příklad
@@ -38,15 +38,10 @@ const Person = struct {
     born: use_xml.Timestamp,
 };
 
-fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
-    var parse_diag: use_xml.ParseDiagnostics = .{};
-    var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
-        std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
-        return err;
-    };
+/// On an error of the library, `diag` describes it (valid also after this function returns).
+fn readPeople(gpa: std.mem.Allocator, input: []const u8, diag: *use_xml.Diagnostics) ![]Person {
+    var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = diag });
     defer doc.deinit();
-    // Runs before `doc.deinit()`, while the diagnostics are still valid.
-    errdefer std.log.err("{f}", .{doc.diagnostics()});
 
     const root = doc.root(); // <people>
     const persons = try root.children("person");
@@ -63,10 +58,18 @@ fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
     }
 
     // Fails with error.UnusedData if something in the input was not used;
-    // `doc.diagnostics()` then describes the first unused item.
+    // `diag` then describes the first unused item.
     try doc.expectAllUsed();
     return result;
 }
+
+// The caller:
+var diag_buf: [4096]u8 = undefined;
+var diag: use_xml.Diagnostics = .init(&diag_buf);
+const people = readPeople(gpa, input, &diag) catch |err| {
+    std.log.err("{s}: {f}", .{ @errorName(err), diag });
+    return err;
+};
 ```
 
 ## Typy
@@ -76,8 +79,10 @@ fn readPeople(gpa: std.mem.Allocator, input: []const u8) ![]Person {
 ```zig
 pub const Document = struct {
     pub const Options = struct {
-        /// Filled in when `parse` fails with error.InvalidXml.
-        diagnostics: ?*ParseDiagnostics = null,
+        /// Description of the last error of `parse`, of the extraction functions and of
+        /// `expectAllUsed`. Must stay alive and in place until `deinit`.
+        /// Null = nothing is recorded (and nothing is formatted).
+        diagnostics: ?*Diagnostics = null,
         /// Maximum element nesting depth. Deeper input fails with error.InvalidXml.
         /// The root element has depth 1, so 0 rejects every document.
         /// Printing paths (`Elem.path`, diagnostics) takes time quadratic in the depth.
@@ -92,16 +97,13 @@ pub const Document = struct {
     /// The root element.
     pub fn root(doc: *Document) *Elem;
 
-    /// Details about the last error of an extraction function or of `expectAllUsed`.
-    /// Valid only until `deinit`.
-    pub fn diagnostics(doc: *const Document) Diagnostics;
-
     /// Iterates over elements that have unused content (see "Unused data").
     pub fn unused(doc: *const Document) UnusedIterator;
-    /// Returns error.UnusedData if anything was not used; `diagnostics()` describes it.
+    /// Returns error.UnusedData if anything was not used; `Options.diagnostics` describes it.
     pub fn expectAllUsed(doc: *Document) error{UnusedData}!void;
 };
 
+/// Details go to `Options.diagnostics`.
 pub const ParseError = error{ InvalidXml, OutOfMemory };
 ```
 
@@ -229,10 +231,10 @@ const unit = try img.attrWith("unit", UnitParser{ .allowed = config.units }); //
 ```
 
 Vlastní parsery (`...With`) smí vracet libovolnou chybu (nebo žádnou). Chyba projde beze změny
-a zaznamená se do `doc.diagnostics()` (zprávou je název chyby).
+a zaznamená se do `Options.diagnostics` (zprávou je název chyby).
 Chyby hooků `parseXml` / `parseXmlAlloc` se vrací jako `error.InvalidValue` (kromě
 `error.OutOfMemory`), aby `attr(T, …)` měla vždy množinu chyb `AttrError`. Původní název chyby je
-zprávou v `doc.diagnostics()`.
+zprávou v `Options.diagnostics`.
 
 ## Pravidla použití
 
@@ -249,9 +251,9 @@ zprávou v `doc.diagnostics()`.
 ### Vlákna
 
 Dokument **není thread-safe**, a to ani pro čtení: každá extrakční funkce ho mění (označuje data
-jako použitá, pamatuje si chybějící jména v areně dokumentu a zapisuje `doc.diagnostics()`).
+jako použitá, pamatuje si chybějící jména v areně dokumentu a zapisuje `Options.diagnostics`).
 Dokument a jeho elementy používej vždy jen z jednoho vlákna naráz. Různé dokumenty lze používat
-z různých vláken.
+z různých vláken, každý s vlastní `Diagnostics`.
 
 ## Nepoužitá data
 
@@ -284,10 +286,10 @@ while (it.next()) |u| std.log.warn("unused: {f}", .{u});
   text (a mezi podelementy se odmítne jako smíšený obsah).
 - Atributy `xmlns` / `xmlns:*` se nikdy nehlásí.
 - `doc.expectAllUsed()` je zkratka, která selže s `error.UnusedData` u první položky a popíše ji
-  v `doc.diagnostics()`.
+  v `Options.diagnostics`.
 - Žádná z obou funkcí nealokuje ani nemění, co je označené jako použité, takže je lze volat
   opakovaně; výsledek vždy odpovídá aktuálnímu stavu. `unused()` nemění vůbec nic;
-  `expectAllUsed()` jen zapíše svůj popis do `doc.diagnostics()`.
+  `expectAllUsed()` jen zapíše svůj popis do `Options.diagnostics`.
 
 Příklad (z testů UseData.Xml):
 
@@ -354,91 +356,80 @@ Přijímaný formát (jako `dateTimeOffset` v UseData.Xml):
 `YYYY-MM-DDTHH:MM:SS[.f…]Z`, kde `T` může být i jedna mezera a desetinná část má 1–9 číslic.
 Datum i čas se validují (délky měsíců, přestupné roky). Roky jsou 0000–9999.
 
-## `ParseDiagnostics` a `Diagnostics`
+## `Diagnostics`
 
 ```zig
-/// Errors of `Document.parse`. Doesn't point anywhere, so it is valid forever.
-pub const ParseDiagnostics = struct {
-    message: []const u8 = "", // static string; empty = no error
-    line: u32 = 0, // 1-based
-    column: u32 = 0, // 1-based, in code points
-
-    /// Prints e.g. `invalid XML at line 2, column 4: end tag does not match start tag`.
-    pub fn format(d: ParseDiagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void;
-};
-
-/// Errors of extraction functions and of `expectAllUsed`, recorded by the document.
+/// Description of the last error. The text is copied into a buffer from the caller,
+/// so it stays valid after `doc.deinit()` (as long as the buffer lives).
 pub const Diagnostics = struct {
     kind: Kind = .none,
-    /// Element where the error happened.
-    elem: ?*const Elem = null,
-    /// Attribute name, child name, or null (text).
-    selector: ?[]const u8 = null,
-    /// The string that failed to parse, the unused value, or null.
-    input: ?[]const u8 = null,
-    /// Human-readable message (static string or error name).
-    message: []const u8 = "",
+    /// 1-based position in the input; only for `invalid_xml`, otherwise 0.
+    line: u32 = 0,
+    column: u32 = 0, // in code points
+    /// True if the description didn't fit into the buffer.
+    truncated: bool = false,
+    // internal: buf: []u8, len: usize
 
     pub const Kind = enum {
         none,
+        invalid_xml,            // Document.parse: error.InvalidXml
         missing,
         too_many,
         has_children,
         already_used,
-        invalid_value,
-        unused_data,
-        /// The document's internal memory (the allocator passed to `Document.parse`) ran out.
+        invalid_value,          // also errors of custom parsers
+        unused_data,            // expectAllUsed: the first unused item
+        /// The document's internal memory (the allocator passed to `Document.parse`) ran out,
+        /// also in `Document.parse` itself.
         document_out_of_memory,
         /// Producing the value ran out of memory: the allocator passed to an `...Alloc` function,
         /// or a custom parser / `parseXmlAlloc` hook returned `error.OutOfMemory`.
         value_out_of_memory,
     };
 
-    /// Prints e.g. `/company/address[0]: "city": attribute is missing`.
+    pub fn init(buf: []u8) Diagnostics;
+    /// The description, e.g. `/company/address[0]: "city": attribute is missing` or
+    /// `invalid XML at line 2, column 4: end tag does not match start tag`.
+    pub fn message(d: *const Diagnostics) []const u8;
+    /// Prints `message()`, plus `…` if it was truncated (or `no error`).
     pub fn format(d: Diagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void;
 };
 ```
 
-Chyby se popisují na dvou místech:
-
-- **Syntaktické chyby XML** jdou do `ParseDiagnostics` předané v `Options.diagnostics` (když
-  `parse` selže, žádný dokument, kam je uložit, není). Neobsahuje žádné ukazatele, takže platí
-  navždy.
-- **Chyby extrakčních funkcí a `expectAllUsed`** si zaznamenává sám dokument; `doc.diagnostics()`
-  vrátí tu poslední. Její slicy ukazují do vstupu nebo do dokumentu, takže platí jen do
-  `doc.deinit()`. Protože je součástí dokumentu, je tato doba platnosti zřejmá.
-  Zaznamenává se každá chyba, kterou tyto funkce vrátí, i `error.OutOfMemory`, takže po chybě
-  knihovny ji `doc.diagnostics()` vždy popisuje. Dva druhy říkají, kde paměť došla:
-  `document_out_of_memory` (interní paměť dokumentu, používaná jen k zapamatování vyžádaných
-  jmen, která neexistují) a `value_out_of_memory` (vytváření hodnoty: alokátor funkce `...Alloc`,
-  nebo vlastní parser či hook `parseXmlAlloc`, který vrátil `error.OutOfMemory`).
-
-  Drží jen **poslední** chybu: každá chyba ji přepíše a nic jiného ji nemění. Volání, která
-  uspějí, v ní nechají předchozí chybu, proto `doc.diagnostics()` čti hned po chybě (v `catch`
-  nebo `errdefer`). `kind != .none` říká jen to, že *nějaké* dřívější volání selhalo. Chyby, které
-  nepochází z knihovny (např. z vlastních alokací mezi voláními), se pochopitelně nezaznamenají:
-  `errdefer`, který loguje `doc.diagnostics()`, pak vypíše starší chybu.
-
-**Chyby extrakce nahlas dřív, než zavoláš `doc.deinit()`.** Odpovídá za to kód, který dokument
-parsuje. Typický vzor:
+Chyby v Zigu nemohou nést data, proto se popis chyby zapisuje jako text do `Diagnostics`
+předané v `Options.diagnostics`, s bufferem od volajícího:
 
 ```zig
-var parse_diag: use_xml.ParseDiagnostics = .{};
-var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
-    std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
-    return err;
-};
-defer doc.deinit();
-// `errdefer` declared after `defer doc.deinit()` runs before it.
-errdefer std.log.err("{f}", .{doc.diagnostics()});
+var diag_buf: [4096]u8 = undefined;
+var diag: use_xml.Diagnostics = .init(&diag_buf);
+var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
 ```
 
-Příklad `examples/m7/m7.zig` ukazuje totéž s writerem, který předá volající.
+- **Zaznamená se každá chyba, kterou knihovna vrátí**: syntaktické chyby XML z `parse` (s `line`
+  a `column`), chyby extrakčních funkcí a `expectAllUsed` i `error.OutOfMemory`. Dva druhy říkají,
+  kde paměť došla: `document_out_of_memory` (interní paměť dokumentu: v `parse` a při
+  zapamatování vyžádaných jmen, která neexistují) a `value_out_of_memory` (vytváření hodnoty:
+  alokátor funkce `...Alloc`, nebo vlastní parser či hook `parseXmlAlloc`, který vrátil
+  `error.OutOfMemory`).
+- Drží jen **poslední** chybu: každá chyba ji přepíše a nic jiného ji nemění. `parse` ji na
+  začátku vynuluje; volání, která uspějí, v ní nechají předchozí chybu, proto ji čti hned po
+  chybě. `kind != .none` říká jen to, že *nějaké* dřívější volání selhalo. Chyby, které
+  nepochází z knihovny (např. z vlastních alokací mezi voláními), se pochopitelně nezaznamenají.
+- Text **neukazuje do vstupu ani do dokumentu**, takže ho lze nahlásit i po `doc.deinit()`,
+  typicky ve volajícím funkce, která parsuje (viz příklad na začátku). Hodnota `Diagnostics` i její
+  buffer musí žít a zůstat na místě až do `doc.deinit()`, protože do nich dokument zapisuje.
+- Jména a hodnoty delší než 1024 bajtů se zkrátí (`…`), aby se zbytek popisu vešel. Když se celý
+  popis do bufferu nevejde, ořízne se na hranici UTF-8 znaku a nastaví se `truncated`. S prázdným
+  bufferem (`.init(&.{})`) se zaznamená jen `kind`, `line` a `column`.
+- Bez `Options.diagnostics` se nic nezaznamená ani neformátuje, takže chyby nic navíc nestojí
+  (např. když se `childOpt` / `catch` používá k řízení toku).
+
+Příklad `examples/m7/m7.zig` ukazuje funkci, která dostane `?*Diagnostics` od volajícího.
 
 ## Nedostatek paměti
 
 - `Document.parse`: při `error.OutOfMemory` se uvolní vše, co se do té doby alokovalo, a žádný
-  dokument se nevrátí. `ParseDiagnostics` se nevyplní (samotná chyba říká dost).
+  dokument se nevrátí. Diagnostika dostane druh `document_out_of_memory`.
 - Vyhledávání podle jména (`attr*`, `child*`, `children`) může vrátit `error.OutOfMemory` **jen
   tehdy, když jméno v elementu neexistuje**: jméno se pak zkopíruje do interní areny dokumentu,
   aby šlo odhalit druhé vyžádání. Existující jména žádnou alokaci nepotřebují.
@@ -447,7 +438,7 @@ Příklad `examples/m7/m7.zig` ukazuje totéž s writerem, který předá volaj�
 - Funkce `...Alloc` vrátí `error.OutOfMemory`, když selže alokátor volajícího. Nic neunikne: paměť
   alokovaná pro neúspěšnou hodnotu se před návratem uvolní. Hodnoty vrácené dřívějšími voláními
   patří volajícímu, který je uvolní jako obvykle (`errdefer`).
-- Každá chyba `error.OutOfMemory` extrakční funkce se zaznamená do `doc.diagnostics()` (druh
+- Každá chyba `error.OutOfMemory` se zaznamená do `Options.diagnostics` (druh
   `document_out_of_memory` nebo `value_out_of_memory`, viz výše); zaznamenání nic nealokuje.
 - Hodnota se označí jako použitá ještě před parsováním. I když parsování selže (nevalidní hodnota,
   nedostatek paměti), druhé vyžádání stejného jména selže s `error.AlreadyUsed`.

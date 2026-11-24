@@ -42,7 +42,7 @@ Než začneš cokoli dělat, přečti si tento soubor a [PLAN.cs.md](PLAN.cs.md)
     (funkce `...Alloc`).
   - Žádný skrytý globální stav. Žádné alokace mimo alokátory předané volajícím.
 - Nevalidní vstup nikdy nesmí způsobit panic, nedefinované chování ani přetečení zásobníku.
-  Vrať chybu a zaznamenej podrobnosti (`ParseDiagnostics` / `doc.diagnostics()`).
+  Vrať chybu a zaznamenej podrobnosti (`Diagnostics`).
   Parsování hlavně nesmí rekurzivně volat funkci pro každou úroveň
   zanoření ve vstupu (použij explicitní zásobník nebo nastavitelný limit hloubky).
 - Preferuj jednoduchý a čitelný kód před chytrým. Optimalizuj jen na základě benchmarku.

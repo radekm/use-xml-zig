@@ -14,10 +14,8 @@ pub const Document = @import("Document.zig");
 pub const Elem = @import("Elem.zig");
 /// All errors of the extraction functions (each function returns only a subset, see `Elem`).
 pub const Error = Elem.Error;
-/// Details about the last extraction error, see `Document.diagnostics`.
+/// Description of the last error, see `Document.Options.diagnostics`.
 pub const Diagnostics = @import("Diagnostics.zig");
-/// Details about an XML syntax error, see `Document.Options.diagnostics`.
-pub const ParseDiagnostics = @import("ParseDiagnostics.zig");
 /// Errors of `Document.parse`.
 pub const ParseError = Document.ParseError;
 /// A point in time in UTC with nanosecond precision.

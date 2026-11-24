@@ -6,10 +6,12 @@ A Zig library for extracting data from XML that tells you **which data you did n
 It is inspired by [UseData.Xml](https://github.com/radekm/UseData.Xml) and contains its own XML parser.
 
 ```zig
-var doc = try use_xml.Document.parse(gpa, input, .{});
-defer doc.deinit();
-errdefer std.log.err("{f}", .{doc.diagnostics()}); // e.g. /people/person[1]: "nick": attribute was not used (input: "b")
+var diag_buf: [4096]u8 = undefined;
+var diag: use_xml.Diagnostics = .init(&diag_buf);
+errdefer std.log.err("{f}", .{diag}); // e.g. /people/person[1]: "nick": attribute was not used (input: "b")
 
+var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
+defer doc.deinit();
 for (try doc.root().children("person")) |p| {
     const name = try p.attr([]const u8, "name");
     const age = try p.attr(u8, "age");

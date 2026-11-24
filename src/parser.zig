@@ -12,17 +12,15 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const chars = @import("chars.zig");
-const ParseDiagnostics = @import("ParseDiagnostics.zig");
 const Document = @import("Document.zig");
 const Elem = @import("Elem.zig");
 
 const Error = Document.ParseError;
 
 /// Parses `ctx.input` and returns the root element allocated in `ctx.arena`.
-pub fn parse(ctx: *Document.Context, max_depth: u32, diagnostics: ?*ParseDiagnostics) Error!*Elem {
+pub fn parse(ctx: *Document.Context, max_depth: u32) Error!*Elem {
     var p: Parser = .{
         .ctx = ctx,
-        .diagnostics = diagnostics,
         .input = ctx.input,
         .gpa = ctx.gpa,
         .arena = ctx.arena.allocator(),
@@ -119,7 +117,6 @@ const hash_threshold = 512;
 
 const Parser = struct {
     ctx: *Document.Context,
-    diagnostics: ?*ParseDiagnostics,
     input: []const u8,
     pos: usize = 0,
     /// For temporary data, freed by `deinit`.
@@ -145,10 +142,7 @@ const Parser = struct {
     }
 
     fn fail(p: *Parser, offset: usize, message: []const u8) error{InvalidXml} {
-        if (p.diagnostics) |d| {
-            const lc = ParseDiagnostics.lineColumn(p.input, offset);
-            d.* = .{ .message = message, .line = lc.line, .column = lc.column };
-        }
+        if (p.ctx.diag) |d| d.recordInvalidXml(p.input, offset, message);
         return error.InvalidXml;
     }
 

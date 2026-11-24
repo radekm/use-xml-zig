@@ -40,15 +40,10 @@ const Person = struct {
 
 /// Reads `<people><person name="…" age="…"><email>…</email></person>…</people>`.
 /// The result is allocated in `arena`.
-fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
-    var parse_diag: use_xml.ParseDiagnostics = .{};
-    var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
-        std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
-        return err;
-    };
+/// On an error of the library, `diag` describes it.
+fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8, diag: *use_xml.Diagnostics) ![]Person {
+    var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = diag });
     defer doc.deinit();
-    // Runs before `doc.deinit()`, while the diagnostics are still valid.
-    errdefer std.log.err("{f}", .{doc.diagnostics()});
 
     const persons = try doc.root().children("person");
     const result = try arena.alloc(Person, persons.len);
@@ -62,6 +57,19 @@ fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
 
     try doc.expectAllUsed();
     return result;
+}
+
+/// The caller owns the diagnostics, so it can report the error after the document is freed.
+fn printPeople(gpa: Allocator, input: []const u8) !void {
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    var diag_buf: [4096]u8 = undefined;
+    var diag: use_xml.Diagnostics = .init(&diag_buf);
+    const people = readPeople(gpa, arena.allocator(), input, &diag) catch |err| {
+        std.log.err("{s}: {f}", .{ @errorName(err), diag });
+        return err;
+    };
+    for (people) |p| std.log.info("{s} ({d})", .{ p.name, p.age });
 }
 ```
 
@@ -191,18 +199,17 @@ arena (as in the quick start), and free the document before returning.
 
 A document is **not thread-safe**, not even for reading: every extraction function (`attr`,
 `child`, `text`, …) changes it, because it records what was used. Use one document from one thread
-at a time; different documents can be used in parallel.
+at a time; different documents can be used in parallel, each with its own `Diagnostics`.
 
 ## Errors
 
-Zig errors can't carry data, so the details are stored separately:
-
-- XML syntax errors (`error.InvalidXml` from `Document.parse`) go to `use_xml.ParseDiagnostics`, passed in
-  `Document.Options.diagnostics`, e.g. `invalid XML at line 2, column 4: end tag does not match start tag`.
-- All other errors are recorded by the document; `doc.diagnostics()` returns the last one:
+Zig errors can't carry data, so the description is written into a `use_xml.Diagnostics` passed in
+`Document.Options.diagnostics`, with a buffer you provide (as in the quick start). Every error of
+the library is recorded there; it holds only the last one:
 
 | Error            | `Diagnostics.kind` | Example of `"{f}"` |
 |------------------|--------------------|--------------------|
+| `InvalidXml`     | `invalid_xml`      | `invalid XML at line 2, column 4: end tag does not match start tag` |
 | `Missing`        | `missing`          | `/person: "name": expected exactly one child element, found none` |
 | `TooMany`        | `too_many`         | `/person: "name": expected at most one child element, found more than one` |
 | `HasChildren`    | `has_children`     | `/person: element has child elements, so it has no text` |
@@ -216,9 +223,11 @@ Zig errors can't carry data, so the details are stored separately:
 `value_out_of_memory` means that producing the value ran out of memory (the allocator passed to
 `...Alloc`, or your parser); `document_out_of_memory` means that the document's own memory ran out.
 
-**`doc.diagnostics()` points into the document, so report the error before `doc.deinit()`.**
-With `defer doc.deinit()` followed by `errdefer …` (as in the quick start) the `errdefer` runs first,
-so the diagnostics are still valid there. `ParseDiagnostics` has no such limitation.
+The description is copied into your buffer, so it stays valid after `doc.deinit()`: report the
+error where it is convenient, e.g. in the caller. Keep the `Diagnostics` (and its buffer) alive
+until `doc.deinit()`, because the document writes into it. Descriptions that don't fit into the
+buffer are cut (`truncated` is set); 4096 bytes is plenty for typical documents. Without
+`Options.diagnostics` nothing is recorded.
 
 ## Unused data
 
@@ -253,7 +262,7 @@ To mark data you intentionally don't need, request it and ignore the result
 inside the children.
 
 `doc.expectAllUsed()` is a shortcut: it fails with `error.UnusedData` and describes the first
-unused item in `doc.diagnostics()`.
+unused item in the diagnostics.
 
 ## Supported XML
 
@@ -276,7 +285,7 @@ adapted to Zig:
 - Instead of callbacks (`child "a" (fun e -> …)`), `child("a")` returns the element.
 - Unused data is checked once after extraction (`doc.unused()`, `doc.expectAllUsed()`), not when
   each element is disposed.
-- Errors are Zig errors plus `doc.diagnostics()` / `ParseDiagnostics` instead of exceptions.
+- Errors are Zig errors plus a `Diagnostics` with a description instead of exceptions.
 - `text` on an element with child elements is an error, not `""`.
 - `decimal` is not supported; numbers with a fraction are parsed as floats.
 

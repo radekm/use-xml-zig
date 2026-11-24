@@ -4,7 +4,7 @@ const std = @import("std");
 const t = std.testing;
 const Document = @import("Document.zig");
 const Elem = @import("Elem.zig");
-const ParseDiagnostics = @import("ParseDiagnostics.zig");
+const Diagnostics = @import("Diagnostics.zig");
 
 // These helpers read the fields directly, so that the tests don't mark anything as used.
 
@@ -33,10 +33,16 @@ fn expectInvalid(input: []const u8, message: []const u8, line: u32, column: u32)
 }
 
 fn expectInvalidWithDepth(input: []const u8, max_depth: u32, message: []const u8, line: u32, column: u32) !void {
-    var diag: ParseDiagnostics = .{};
+    var diag_buf: [256]u8 = undefined;
+    var diag: Diagnostics = .init(&diag_buf);
     const options: Document.Options = .{ .diagnostics = &diag, .max_depth = max_depth };
     try t.expectError(error.InvalidXml, Document.parse(t.allocator, input, options));
-    try t.expectEqualStrings(message, diag.message);
+    try t.expectEqual(Diagnostics.Kind.invalid_xml, diag.kind);
+    var expected: [256]u8 = undefined;
+    try t.expectEqualStrings(
+        try std.fmt.bufPrint(&expected, "invalid XML at line {d}, column {d}: {s}", .{ line, column, message }),
+        diag.message(),
+    );
     try t.expectEqual(line, diag.line);
     try t.expectEqual(column, diag.column);
 }
@@ -260,10 +266,11 @@ test "many attributes and many groups of children (hash map lookup)" {
             try buf.appendSlice(gpa, c.tail);
         }
         const offset = std.mem.lastIndexOf(u8, buf.items, c.marker).?;
-        var diag: ParseDiagnostics = .{};
+        var diag_buf: [256]u8 = undefined;
+        var diag: Diagnostics = .init(&diag_buf);
         try t.expectError(error.InvalidXml, Document.parse(gpa, buf.items, .{ .diagnostics = &diag }));
-        try t.expectEqualStrings(c.message, diag.message);
-        try t.expectEqual(ParseDiagnostics.lineColumn(buf.items, offset).column, diag.column);
+        try t.expect(std.mem.endsWith(u8, diag.message(), c.message));
+        try t.expectEqual(Diagnostics.lineColumn(buf.items, offset).column, diag.column);
     }
 }
 
@@ -420,13 +427,28 @@ test "invalid: nesting depth" {
 }
 
 test "diagnostics format" {
-    var diag: ParseDiagnostics = .{};
+    var diag_buf: [100]u8 = undefined;
+    var diag: Diagnostics = .init(&diag_buf);
     try t.expectError(error.InvalidXml, Document.parse(t.allocator, "<a>\n</b>", .{ .diagnostics = &diag }));
     var buf: [100]u8 = undefined;
     try t.expectEqualStrings(
         "invalid XML at line 2, column 1: end tag does not match start tag",
         try std.fmt.bufPrint(&buf, "{f}", .{diag}),
     );
+}
+
+test "diagnostics are reset by parse and describe out of memory" {
+    var diag_buf: [100]u8 = undefined;
+    var diag: Diagnostics = .init(&diag_buf);
+    try t.expectError(error.InvalidXml, Document.parse(t.allocator, "<a>", .{ .diagnostics = &diag }));
+    var doc = try Document.parse(t.allocator, "<a/>", .{ .diagnostics = &diag });
+    doc.deinit();
+    try t.expectEqual(Diagnostics.Kind.none, diag.kind);
+
+    var failing: std.testing.FailingAllocator = .init(t.allocator, .{ .fail_index = 0 });
+    try t.expectError(error.OutOfMemory, Document.parse(failing.allocator(), "<a/>", .{ .diagnostics = &diag }));
+    try t.expectEqual(Diagnostics.Kind.document_out_of_memory, diag.kind);
+    try t.expectEqualStrings("document out of memory", diag.message());
 }
 
 test "randomly corrupted input never crashes" {
@@ -455,7 +477,8 @@ test "randomly corrupted input never crashes" {
             }
             if (len == 0) break;
         }
-        var diag: ParseDiagnostics = .{};
+        var diag_buf: [256]u8 = undefined;
+        var diag: Diagnostics = .init(&diag_buf);
         if (Document.parse(t.allocator, buf[0..len], .{ .diagnostics = &diag })) |doc_const| {
             var doc = doc_const;
             doc.deinit();

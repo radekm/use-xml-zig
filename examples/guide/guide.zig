@@ -16,15 +16,10 @@ const Person = struct {
 
 /// Reads `<people><person name="…" age="…"><email>…</email></person>…</people>`.
 /// The result is allocated in `arena`.
-fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
-    var parse_diag: use_xml.ParseDiagnostics = .{};
-    var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
-        std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
-        return err;
-    };
+/// On an error of the library, `diag` describes it.
+fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8, diag: *use_xml.Diagnostics) ![]Person {
+    var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = diag });
     defer doc.deinit();
-    // Runs before `doc.deinit()`, while the diagnostics are still valid.
-    errdefer std.log.err("{f}", .{doc.diagnostics()});
 
     const persons = try doc.root().children("person");
     const result = try arena.alloc(Person, persons.len);
@@ -40,20 +35,45 @@ fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
     return result;
 }
 
+/// The caller owns the diagnostics, so it can report the error after the document is freed.
+fn printPeople(gpa: Allocator, input: []const u8) !void {
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    var diag_buf: [4096]u8 = undefined;
+    var diag: use_xml.Diagnostics = .init(&diag_buf);
+    const people = readPeople(gpa, arena.allocator(), input, &diag) catch |err| {
+        std.log.err("{s}: {f}", .{ @errorName(err), diag });
+        return err;
+    };
+    for (people) |p| std.log.info("{s} ({d})", .{ p.name, p.age });
+}
+
 test "quick start" {
     var arena: std.heap.ArenaAllocator = .init(t.allocator);
     defer arena.deinit();
+    var diag_buf: [4096]u8 = undefined;
+    var diag: use_xml.Diagnostics = .init(&diag_buf);
     const people = try readPeople(t.allocator, arena.allocator(),
         \\<people>
         \\  <person name="Alice" age="31"><email>alice@example.com</email></person>
         \\  <person name="Bob" age="42"/>
         \\</people>
-    );
+    , &diag);
     try t.expectEqual(2, people.len);
     try t.expectEqualStrings("Alice", people[0].name);
     try t.expectEqualStrings("alice@example.com", people[0].email.?);
     try t.expectEqual(42, people[1].age);
     try t.expectEqual(null, people[1].email);
+
+    // An unused attribute: the description is valid after `readPeople` freed the document.
+    try t.expectError(error.UnusedData, readPeople(t.allocator, arena.allocator(),
+        \\<people><person name="Bob" age="42" nick="b"/></people>
+    , &diag));
+    var buf: [128]u8 = undefined;
+    try t.expectEqualStrings(
+        \\/people/person[0]: "nick": attribute was not used (input: "b")
+    , try std.fmt.bufPrint(&buf, "{f}", .{diag}));
+    try printPeople(t.allocator, "<people/>");
 }
 
 // ------------------------------------------------------------------ Values
@@ -157,20 +177,23 @@ test "unused data" {
 // ------------------------------------------------------------------ Errors
 
 test "errors" {
-    var doc = try use_xml.Document.parse(t.allocator, "<server port=\"80x\"/>", .{});
+    var diag_buf: [4096]u8 = undefined;
+    var diag: use_xml.Diagnostics = .init(&diag_buf);
+    var doc = try use_xml.Document.parse(t.allocator, "<server port=\"80x\"/>", .{ .diagnostics = &diag });
     defer doc.deinit();
 
     try t.expectError(error.InvalidValue, doc.root().attr(u16, "port"));
     var buf: [128]u8 = undefined;
     try t.expectEqualStrings(
         "/server: \"port\": expected integer (u16) (input: \"80x\")",
-        try std.fmt.bufPrint(&buf, "{f}", .{doc.diagnostics()}),
+        try std.fmt.bufPrint(&buf, "{f}", .{diag}),
     );
 
-    var parse_diag: use_xml.ParseDiagnostics = .{};
-    try t.expectError(error.InvalidXml, use_xml.Document.parse(t.allocator, "<a>\n<b></a>", .{ .diagnostics = &parse_diag }));
+    try t.expectError(error.InvalidXml, use_xml.Document.parse(t.allocator, "<a>\n<b></a>", .{ .diagnostics = &diag }));
+    try t.expectEqual(.invalid_xml, diag.kind);
+    try t.expectEqual(2, diag.line);
     try t.expectEqualStrings(
         "invalid XML at line 2, column 4: end tag does not match start tag",
-        try std.fmt.bufPrint(&buf, "{f}", .{parse_diag}),
+        try std.fmt.bufPrint(&buf, "{f}", .{diag}),
     );
 }

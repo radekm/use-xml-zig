@@ -33,7 +33,7 @@ visited: bool = false,
 /// Names that were requested but don't exist in this element.
 missing: ?*Missing = null,
 
-/// All errors of the extraction functions. Details are in `Document.diagnostics()`.
+/// All errors of the extraction functions. Details go to `Document.Options.diagnostics`.
 /// Each function returns only the subset that can actually happen (see below).
 pub const Error = error{
     /// A required attribute or child element doesn't exist.
@@ -280,15 +280,15 @@ fn OptWithResult(comptime LookupError: type, comptime Parser: type) type {
 }
 
 fn report(e: *Elem, kind: Diagnostics.Kind, selector: ?[]const u8, input: ?[]const u8, message: []const u8) void {
-    e.ctx.diag = .{ .kind = kind, .elem = e, .selector = selector, .input = input, .message = message };
+    if (e.ctx.diag) |d| d.record(kind, e, selector, input, message);
 }
 
 const document_oom_message = "document out of memory";
 const value_oom_message = "out of memory while producing the value";
 
-/// Records that the document's internal memory ran out.
-fn reportDocumentOutOfMemory(e: *Elem) error{OutOfMemory} {
-    e.report(.document_out_of_memory, null, null, document_oom_message);
+/// Records that the document's internal memory ran out while remembering `missing_name`.
+fn reportDocumentOutOfMemory(e: *Elem, missing_name: []const u8) error{OutOfMemory} {
+    e.report(.document_out_of_memory, missing_name, null, document_oom_message);
     return error.OutOfMemory;
 }
 
@@ -302,9 +302,8 @@ fn useMissing(e: *Elem, kind: @FieldType(Missing, "kind"), wanted: []const u8, m
         }
     }
     const arena = e.ctx.arena.allocator();
-    // `wanted` belongs to the caller, so it can't be the selector of the diagnostics.
-    const node = arena.create(Missing) catch return e.reportDocumentOutOfMemory();
-    const name_copy = arena.dupe(u8, wanted) catch return e.reportDocumentOutOfMemory();
+    const node = arena.create(Missing) catch return e.reportDocumentOutOfMemory(wanted);
+    const name_copy = arena.dupe(u8, wanted) catch return e.reportDocumentOutOfMemory(wanted);
     node.* = .{ .kind = kind, .name = name_copy, .next = e.missing };
     e.missing = node;
     return node.name;

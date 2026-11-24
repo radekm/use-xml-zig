@@ -42,7 +42,7 @@ Read this file and [PLAN.md](PLAN.md) before starting any work.
     (`...Alloc` functions).
   - No hidden global state. No allocation outside the allocators the caller passed in.
 - Invalid input must never cause a panic, undefined behaviour or a stack overflow. Return an error
-  and record the details (`ParseDiagnostics` / `doc.diagnostics()`).
+  and record the details (`Diagnostics`).
   In particular, parsing must not recurse once per nesting level of
   the input (use an explicit stack or a configurable depth limit).
 - Prefer simple, readable code over clever code. Optimise only with a benchmark.

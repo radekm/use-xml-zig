@@ -6,15 +6,28 @@ const Document = @import("Document.zig");
 const Elem = @import("Elem.zig");
 const Diagnostics = @import("Diagnostics.zig");
 
+/// Diagnostics with a buffer, on the heap so that their address doesn't change when the
+/// fixture is moved (the document keeps a pointer to them).
+const DiagBox = struct {
+    buf: [512]u8 = undefined,
+    diag: Diagnostics = .{},
+};
+
 const Fixture = struct {
     doc: Document,
+    box: *DiagBox,
 
     fn init(input: []const u8) !Fixture {
-        return .{ .doc = try Document.parse(t.allocator, input, .{}) };
+        const box = try t.allocator.create(DiagBox);
+        errdefer t.allocator.destroy(box);
+        box.* = .{};
+        box.diag = .init(&box.buf);
+        return .{ .doc = try Document.parse(t.allocator, input, .{ .diagnostics = &box.diag }), .box = box };
     }
 
     fn deinit(f: *Fixture) void {
         f.doc.deinit();
+        t.allocator.destroy(f.box);
     }
 
     fn root(f: *Fixture) *Elem {
@@ -22,9 +35,9 @@ const Fixture = struct {
     }
 
     fn expectDiag(f: *Fixture, kind: Diagnostics.Kind, formatted: []const u8) !void {
-        try t.expectEqual(kind, f.doc.diagnostics().kind);
-        var buf: [256]u8 = undefined;
-        try t.expectEqualStrings(formatted, try std.fmt.bufPrint(&buf, "{f}", .{f.doc.diagnostics()}));
+        try t.expectEqual(kind, f.box.diag.kind);
+        var buf: [512]u8 = undefined;
+        try t.expectEqualStrings(formatted, try std.fmt.bufPrint(&buf, "{f}", .{f.box.diag}));
     }
 };
 
@@ -108,7 +121,6 @@ test "no child when one child is expected" {
     defer f.deinit();
     try t.expectError(error.Missing, f.root().child("name"));
     try f.expectDiag(.missing, "/dog: \"name\": expected exactly one child element, found none");
-    try t.expectEqual(f.root(), f.doc.diagnostics().elem.?);
 }
 
 test "no attribute when one attribute is expected" {
@@ -163,7 +175,7 @@ test "the name passed in may be a temporary buffer" {
     var name_buf = "zz".*;
     try t.expectError(error.Missing, f.root().attr([]const u8, &name_buf));
     name_buf = "qq".*;
-    try t.expectEqualStrings("zz", f.doc.diagnostics().selector.?);
+    try f.expectDiag(.missing, "/a: \"zz\": attribute is missing");
     try t.expectError(error.AlreadyUsed, f.root().attr([]const u8, "zz"));
 }
 
@@ -409,7 +421,9 @@ test "out of memory is recorded in diagnostics" {
     // Remembering a missing name in the document's arena fails.
     {
         var failing: std.testing.FailingAllocator = .init(t.allocator, .{});
-        var doc = try Document.parse(failing.allocator(), "<a/>", .{});
+        var diag_buf: [2048]u8 = undefined;
+        var diag: Diagnostics = .init(&diag_buf);
+        var doc = try Document.parse(failing.allocator(), "<a/>", .{ .diagnostics = &diag });
         defer doc.deinit();
         _ = doc.root().attr(u8, "x") catch {}; // an older error
         failing.fail_index = failing.alloc_index; // fail from now on
@@ -418,9 +432,11 @@ test "out of memory is recorded in diagnostics" {
         defer t.allocator.free(long_name);
         @memset(long_name, 'n');
         try t.expectError(error.OutOfMemory, doc.root().attrOpt(u8, long_name));
-        try t.expectEqual(Diagnostics.Kind.document_out_of_memory, doc.diagnostics().kind);
-        var buf: [64]u8 = undefined;
-        try t.expectEqualStrings("/a: document out of memory", try std.fmt.bufPrint(&buf, "{f}", .{doc.diagnostics()}));
+        try t.expectEqual(Diagnostics.Kind.document_out_of_memory, diag.kind);
+        // The name is shortened in the description.
+        try t.expect(std.mem.startsWith(u8, diag.message(), "/a: \"nnnn"));
+        try t.expect(std.mem.endsWith(u8, diag.message(), "n…\": document out of memory"));
+        try t.expect(!diag.truncated);
     }
 }
 

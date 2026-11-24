@@ -6,7 +6,8 @@
 //! Every input must either parse or fail with `error.InvalidXml` and filled-in diagnostics.
 //! For parsed documents, random extraction calls check the usage rules:
 //! - each attribute / child name / text can be requested once, then `error.AlreadyUsed`,
-//! - every other error (except `OutOfMemory`) is recorded in `doc.diagnostics()`,
+//! - every error is recorded in the diagnostics, with the right kind; descriptions are valid
+//!   UTF-8 and cut correctly when the buffer is small,
 //! - `expectAllUsed()` succeeds exactly when `unused()` yields nothing,
 //! - after `ignoreAll()` on every visited element, everything is used.
 //! The testing allocator detects leaks, double frees and use after free.
@@ -16,7 +17,7 @@ const t = std.testing;
 const Allocator = std.mem.Allocator;
 const Document = @import("Document.zig");
 const Elem = @import("Elem.zig");
-const ParseDiagnostics = @import("ParseDiagnostics.zig");
+const Diagnostics = @import("Diagnostics.zig");
 const Timestamp = @import("Timestamp.zig");
 const parse = @import("parse.zig");
 
@@ -248,6 +249,7 @@ const Ex = struct {
     r: std.Random,
     gpa: Allocator,
     doc: *Document,
+    diag: *Diagnostics,
     elems: std.ArrayList(*Elem) = .empty,
     used: std.ArrayList(UseKey) = .empty,
     failing: std.testing.FailingAllocator,
@@ -282,7 +284,7 @@ const Ex = struct {
     fn check(x: *Ex, e: *Elem, kind: u8, n: []const u8, err: ?anyerror) !void {
         const before = x.wasUsed(e, kind, n);
         if (before) {
-            if (err == null or err.? != error.AlreadyUsed or x.doc.diagnostics().kind != .already_used) {
+            if (err == null or err.? != error.AlreadyUsed or x.diag.*.kind != .already_used) {
                 std.debug.print("expected AlreadyUsed for kind {d} name '{s}' got {?}\n", .{ kind, n, err });
                 return error.TestUnexpectedResult;
             }
@@ -294,11 +296,12 @@ const Ex = struct {
                 return error.TestUnexpectedResult;
             }
             // Every error must be recorded (diagnostics are cleared before each call).
-            const recorded = x.doc.diagnostics().kind;
+            const recorded = x.diag.*.kind;
             if (recorded == .none) return error.TestUnexpectedResult;
             const oom_kind = recorded == .document_out_of_memory or recorded == .value_out_of_memory;
             if ((er == error.OutOfMemory) != oom_kind) return error.TestUnexpectedResult;
-            try x.fmt(x.doc.diagnostics());
+            try x.fmt(x.diag.*);
+            try checkDiagnostics(x.diag);
         }
         // Names are compared by value; for kind 0/1 the lookup is by local name.
         try x.used.append(x.gpa, .{ .elem = e, .kind = kind, .name = n });
@@ -474,7 +477,7 @@ const Ex = struct {
         var steps = x.r.uintLessThan(u32, 60);
         while (steps > 0) : (steps -= 1) {
             // Internal: clear the diagnostics, so that `check` sees only what this call recorded.
-            x.doc.ctx.diag = .{};
+            x.diag.reset();
             const e = x.elems.items[x.r.uintLessThan(usize, x.elems.items.len)];
             switch (x.r.uintLessThan(u32, 12)) {
                 0, 1, 2 => try x.attrOp(e, x.pickName(e, 0)),
@@ -495,7 +498,7 @@ const Ex = struct {
                     const all_used = if (x.doc.expectAllUsed()) |_| true else |_| false;
                     var it = x.doc.unused();
                     if (all_used != (it.next() == null)) return error.TestUnexpectedResult;
-                    try x.fmt(x.doc.diagnostics());
+                    try x.fmt(x.diag.*);
                 },
                 11 => {
                     try x.fmt(e.path());
@@ -510,30 +513,46 @@ const Ex = struct {
         for (x.elems.items) |e| e.ignoreAll();
         x.doc.expectAllUsed() catch |er| {
             var buf: [256]u8 = undefined;
-            std.debug.print("after ignoreAll: {} {s}\n", .{ er, std.fmt.bufPrint(&buf, "{f}", .{x.doc.diagnostics()}) catch "?" });
+            std.debug.print("after ignoreAll: {} {s}\n", .{ er, std.fmt.bufPrint(&buf, "{f}", .{x.diag.*}) catch "?" });
             return er;
         };
     }
 };
 
 fn oneInput(gpa: Allocator, input: []const u8, seed: u64) !void {
-    var pd: ParseDiagnostics = .{};
+    // Sometimes a tiny buffer, so that descriptions are cut.
+    var diag_buf: [4096]u8 = undefined;
+    const buf_len: usize = switch (seed % 5) {
+        0 => 0,
+        1 => @intCast(seed % 40),
+        else => diag_buf.len,
+    };
+    var diag: Diagnostics = .init(diag_buf[0..buf_len]);
+    defer checkDiagnostics(&diag) catch @panic("invalid diagnostics");
     const max_depth: u32 = if (seed % 7 == 0) 100_000 else if (seed % 11 == 0) 0 else 256;
-    var doc = Document.parse(gpa, input, .{ .diagnostics = &pd, .max_depth = max_depth }) catch |err| switch (err) {
+    var doc = Document.parse(gpa, input, .{ .diagnostics = &diag, .max_depth = max_depth }) catch |err| switch (err) {
         error.InvalidXml => {
-            if (pd.message.len == 0 or pd.line == 0 or pd.column == 0) return error.TestUnexpectedResult;
-            var buf: [256]u8 = undefined;
-            _ = try std.fmt.bufPrint(&buf, "{f}", .{pd});
+            if (diag.kind != .invalid_xml or diag.line == 0 or diag.column == 0) return error.TestUnexpectedResult;
+            if (buf_len == diag_buf.len and (diag.truncated or diag.message().len == 0)) return error.TestUnexpectedResult;
             return;
         },
         error.OutOfMemory => return,
     };
     defer doc.deinit();
-    if (pd.message.len != 0) return error.TestUnexpectedResult;
+    if (diag.kind != .none) return error.TestUnexpectedResult;
     var prng = std.Random.DefaultPrng.init(seed);
-    var ex: Ex = .{ .r = prng.random(), .gpa = gpa, .doc = &doc, .failing = undefined };
+    var ex: Ex = .{ .r = prng.random(), .gpa = gpa, .doc = &doc, .diag = &diag, .failing = undefined };
     defer ex.deinit();
     try ex.run();
+}
+
+/// A description is valid UTF-8, fits into the buffer and can be formatted.
+fn checkDiagnostics(d: *const Diagnostics) !void {
+    if (!std.unicode.utf8ValidateSlice(d.message())) return error.TestUnexpectedResult;
+    if (d.message().len > d.buf.len) return error.TestUnexpectedResult;
+    var buf: [64]u8 = undefined;
+    var w: std.Io.Writer.Discarding = .init(&buf);
+    try w.writer.print("{f}", .{d.*});
 }
 
 fn parseOnly(gpa: Allocator, input: []const u8) !void {

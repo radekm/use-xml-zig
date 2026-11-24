@@ -27,7 +27,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
   `xmlns:*` attributes are skipped. Two sibling elements (or two attributes of one element) with
   the same local name but different prefixes are an error.
 - Extraction API: `attr`, `child`, `children`, `text` and their variants (`Opt`, `With`, `Alloc`),
-  `ignoreAll`; detailed error information in `doc.diagnostics()` / `ParseDiagnostics`.
+  `ignoreAll`; detailed error information in `Diagnostics` (with a buffer from the caller).
 - Reporting unused data after extraction (`Document.unused()`, `Document.expectAllUsed()`).
 - Value parsers: strings, integers, floats, `bool`, enums, `Timestamp` (UTC) and user types.
 
@@ -56,6 +56,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 | 2026-11-23 | Requested names that don't exist are remembered (a second request fails with `AlreadyUsed`); lookups by name may therefore return `OutOfMemory`. |
 | 2026-11-23 | Extraction errors are recorded by the document (`doc.diagnostics()`), so it is obvious they are invalid after `doc.deinit()`; whoever parses reports them before that. XML syntax errors go to a separate `ParseDiagnostics` (no pointers) passed in `Options`. |
 | 2026-11-23 | License: zlib. |
+| 2026-11-24 | Diagnostics are passed in `Options.diagnostics` and copy the description into a buffer from the caller (`Diagnostics.init(&buf)`), so they stay valid after `doc.deinit()`. One `Diagnostics` type for syntax and extraction errors (`ParseDiagnostics` and `doc.diagnostics()` are removed); long names/values are shortened, a description that doesn't fit is cut (`truncated`). Replaces the decision of 2026-11-23 about diagnostics stored in the document. |
 | 2026-11-24 | `doc.diagnostics()` also records `error.OutOfMemory`, so it describes every error returned by the extraction functions. Kind `document_out_of_memory` = the document's internal memory, `value_out_of_memory` = producing the value (allocator of `...Alloc`, custom parser, `parseXmlAlloc`). |
 | 2026-11-24 | `error.WrongCount` is split into `Missing`, `TooMany` and `HasChildren`. Every extraction function returns only the errors that can happen (`ChildError`, `AttrError`, …); `use_xml.Error` is the union of all. |
 | 2026-11-24 | A custom parser in `...With` functions is a function or a value (or pointer) with a method `parse`; the value carries run-time state. No separate context functions. |

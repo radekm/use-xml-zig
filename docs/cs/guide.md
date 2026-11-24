@@ -40,15 +40,10 @@ const Person = struct {
 
 /// Reads `<people><person name="…" age="…"><email>…</email></person>…</people>`.
 /// The result is allocated in `arena`.
-fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
-    var parse_diag: use_xml.ParseDiagnostics = .{};
-    var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
-        std.log.err("{s}: {f}", .{ @errorName(err), parse_diag });
-        return err;
-    };
+/// On an error of the library, `diag` describes it.
+fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8, diag: *use_xml.Diagnostics) ![]Person {
+    var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = diag });
     defer doc.deinit();
-    // Runs before `doc.deinit()`, while the diagnostics are still valid.
-    errdefer std.log.err("{f}", .{doc.diagnostics()});
 
     const persons = try doc.root().children("person");
     const result = try arena.alloc(Person, persons.len);
@@ -62,6 +57,19 @@ fn readPeople(gpa: Allocator, arena: Allocator, input: []const u8) ![]Person {
 
     try doc.expectAllUsed();
     return result;
+}
+
+/// The caller owns the diagnostics, so it can report the error after the document is freed.
+fn printPeople(gpa: Allocator, input: []const u8) !void {
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    var diag_buf: [4096]u8 = undefined;
+    var diag: use_xml.Diagnostics = .init(&diag_buf);
+    const people = readPeople(gpa, arena.allocator(), input, &diag) catch |err| {
+        std.log.err("{s}: {f}", .{ @errorName(err), diag });
+        return err;
+    };
+    for (people) |p| std.log.info("{s} ({d})", .{ p.name, p.age });
 }
 ```
 
@@ -190,19 +198,17 @@ Obvyklý postup je parsovat ve funkci, potřebná data zkopírovat do vlastních
 
 Dokument **není thread-safe**, a to ani pro čtení: každá extrakční funkce (`attr`, `child`,
 `text`, …) ho mění, protože zaznamenává, co bylo použito. Jeden dokument používejte vždy jen
-z jednoho vlákna naráz; různé dokumenty lze zpracovávat paralelně.
+z jednoho vlákna naráz; různé dokumenty lze zpracovávat paralelně, každý s vlastní `Diagnostics`.
 
 ## Chyby
 
-Chyby v Zigu nemohou nést data, proto se podrobnosti ukládají zvlášť:
-
-- Syntaktické chyby XML (`error.InvalidXml` z `Document.parse`) jdou do `use_xml.ParseDiagnostics`,
-  předané v `Document.Options.diagnostics`, např.
-  `invalid XML at line 2, column 4: end tag does not match start tag`.
-- Všechny ostatní chyby si zaznamenává dokument; `doc.diagnostics()` vrátí tu poslední:
+Chyby v Zigu nemohou nést data, proto se popis zapisuje do `use_xml.Diagnostics` předané
+v `Document.Options.diagnostics`, s bufferem, který dodáte (jako v rychlém startu). Zaznamená se
+tam každá chyba knihovny; drží se jen ta poslední:
 
 | Chyba             | `Diagnostics.kind` | Příklad `"{f}"` |
 |-------------------|--------------------|-----------------|
+| `InvalidXml`      | `invalid_xml`      | `invalid XML at line 2, column 4: end tag does not match start tag` |
 | `Missing`         | `missing`          | `/person: "name": expected exactly one child element, found none` |
 | `TooMany`         | `too_many`         | `/person: "name": expected at most one child element, found more than one` |
 | `HasChildren`     | `has_children`     | `/person: element has child elements, so it has no text` |
@@ -216,9 +222,11 @@ Chyby v Zigu nemohou nést data, proto se podrobnosti ukládají zvlášť:
 `value_out_of_memory` znamená, že paměť došla při vytváření hodnoty (alokátor předaný do
 `...Alloc` nebo váš parser); `document_out_of_memory` znamená, že došla vlastní paměť dokumentu.
 
-**`doc.diagnostics()` ukazuje do dokumentu, proto chybu nahlaste před `doc.deinit()`.**
-Když po `defer doc.deinit()` následuje `errdefer …` (jako v rychlém startu), proběhne `errdefer`
-dřív, takže tam je diagnostika ještě platná. `ParseDiagnostics` toto omezení nemá.
+Popis se kopíruje do vašeho bufferu, takže platí i po `doc.deinit()`: chybu nahlaste tam, kde se
+to hodí, např. ve volajícím. `Diagnostics` (i její buffer) musí žít až do `doc.deinit()`, protože
+do ní dokument zapisuje. Popisy, které se do bufferu nevejdou, se oříznou (nastaví se
+`truncated`); 4096 bajtů na běžné dokumenty bohatě stačí. Bez `Options.diagnostics` se nic
+nezaznamená.
 
 ## Nepoužitá data
 
@@ -253,7 +261,7 @@ Data, která záměrně nepotřebujete, buď vyžádejte a výsledek zahoďte
 nahlíželo do podelementů.
 
 `doc.expectAllUsed()` je zkratka: selže s `error.UnusedData` a první nepoužitou položku popíše
-v `doc.diagnostics()`.
+v diagnostice.
 
 ## Podporované XML
 
@@ -276,7 +284,7 @@ přizpůsobené Zigu:
 - Místo callbacků (`child "a" (fun e -> …)`) vrací `child("a")` přímo element.
 - Nepoužitá data se kontrolují jednou po extrakci (`doc.unused()`, `doc.expectAllUsed()`), ne při
   uvolnění každého elementu.
-- Místo výjimek jsou chyby Zigu a `doc.diagnostics()` / `ParseDiagnostics`.
+- Místo výjimek jsou chyby Zigu a `Diagnostics` s popisem.
 - `text` na elementu s podelementy je chyba, ne `""`.
 - `decimal` není podporován; čísla s desetinnou částí se parsují jako floaty.
 

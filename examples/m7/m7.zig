@@ -31,31 +31,16 @@ pub const OrderBookDelta = struct {
 /// in `out`; pass an arena, because partial results are not freed on error.
 /// Fails with `error.UnusedData` if the message contains data this function doesn't read.
 ///
-/// On error, a description is written to `err_out` (if given). It must be written here:
-/// `doc.diagnostics()` points into the document, so it can't be used after `doc.deinit()`.
+/// On an error of the library, `diag` (if given) describes it; the caller reports it.
 pub fn parseOrderBookDelta(
     gpa: Allocator,
     out: Allocator,
     input: []const u8,
-    err_out: ?*std.Io.Writer,
+    diag: ?*use_xml.Diagnostics,
 ) ![]OrderBookDelta {
-    var parse_diag: use_xml.ParseDiagnostics = .{};
-    var doc = use_xml.Document.parse(gpa, input, .{ .diagnostics = &parse_diag }) catch |err| {
-        if (err_out) |w| {
-            if (err == error.InvalidXml) {
-                w.print("{s}: {f}", .{ @errorName(err), parse_diag }) catch {};
-            } else {
-                w.print("{s}", .{@errorName(err)}) catch {};
-            }
-        }
-        return err;
-    };
+    var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = diag });
     defer doc.deinit();
-    // Report errors while the document is still alive.
-    return extract(&doc, out) catch |err| {
-        report(err_out, err, doc.diagnostics());
-        return err;
-    };
+    return extract(&doc, out);
 }
 
 fn extract(doc: *use_xml.Document, out: Allocator) ![]OrderBookDelta {
@@ -103,15 +88,6 @@ fn parseOrders(out: Allocator, list: ?*use_xml.Elem) ![]const Order {
     return orders;
 }
 
-fn report(err_out: ?*std.Io.Writer, err: anyerror, diag: use_xml.Diagnostics) void {
-    const w = err_out orelse return;
-    if (diag.kind == .none) {
-        w.print("{s}", .{@errorName(err)}) catch {};
-    } else {
-        w.print("{s}: {f}", .{ @errorName(err), diag }) catch {};
-    }
-}
-
 /// Custom parser with allocation: accepts strings with at least one non-whitespace character.
 fn dupeNonWhitespace(gpa: Allocator, s: []const u8) error{ OutOfMemory, WhitespaceOnly }![]const u8 {
     if (std.mem.trim(u8, s, " \t\r\n").len == 0) return error.WhitespaceOnly;
@@ -155,9 +131,24 @@ test "parse the M7 message" {
     try t.expectEqual(4, sell_orders);
 }
 
-test "unexpected data in the message is detected" {
+/// Checks that `input` fails with `expected` and that the error is described as `report`
+/// (error name, then the diagnostics), as a caller would log it.
+fn expectError(expected: anyerror, input: []const u8, report: []const u8) !void {
     var arena: std.heap.ArenaAllocator = .init(t.allocator);
     defer arena.deinit();
+    var diag_buf: [4096]u8 = undefined;
+    var diag: use_xml.Diagnostics = .init(&diag_buf);
+    const err = if (parseOrderBookDelta(t.allocator, arena.allocator(), input, &diag)) |_|
+        return error.TestExpectedError
+    else |err|
+        err;
+    try t.expectEqual(expected, err);
+    // The document is already freed here, but the description is still valid.
+    var buf: [256]u8 = undefined;
+    try t.expectEqualStrings(report, try std.fmt.bufPrint(&buf, "{s}: {f}", .{ @errorName(err), diag }));
+}
+
+test "unexpected data in the message is detected" {
     const input =
         \\<PblcOrdrBooksDeltaRprt>
         \\  <StandardHeader marketId="EPEX"/>
@@ -166,18 +157,12 @@ test "unexpected data in the message is detected" {
         \\  </OrdrbookList>
         \\</PblcOrdrBooksDeltaRprt>
     ;
-    var buf: [200]u8 = undefined;
-    var w: std.Io.Writer = .fixed(&buf);
-    try t.expectError(error.UnusedData, parseOrderBookDelta(t.allocator, arena.allocator(), input, &w));
-    try t.expectEqualStrings(
-        "UnusedData: /PblcOrdrBooksDeltaRprt/OrdrbookList[0]/OrdrBook[0]: \"newAttr\": attribute was not used (input: \"?\")",
-        w.buffered(),
+    try expectError(error.UnusedData, input,
+        \\UnusedData: /PblcOrdrBooksDeltaRprt/OrdrbookList[0]/OrdrBook[0]: "newAttr": attribute was not used (input: "?")
     );
 }
 
 test "invalid values are reported" {
-    var arena: std.heap.ArenaAllocator = .init(t.allocator);
-    defer arena.deinit();
     const input =
         \\<PblcOrdrBooksDeltaRprt>
         \\  <StandardHeader marketId="EPEX"/>
@@ -186,22 +171,13 @@ test "invalid values are reported" {
         \\  </OrdrbookList>
         \\</PblcOrdrBooksDeltaRprt>
     ;
-    var buf: [200]u8 = undefined;
-    var w: std.Io.Writer = .fixed(&buf);
-    try t.expectError(error.WhitespaceOnly, parseOrderBookDelta(t.allocator, arena.allocator(), input, &w));
-    try t.expectEqualStrings(
-        "WhitespaceOnly: /PblcOrdrBooksDeltaRprt/OrdrbookList[0]/OrdrBook[0]: \"dlvryAreaId\": WhitespaceOnly (input: \"  \")",
-        w.buffered(),
+    try expectError(error.WhitespaceOnly, input,
+        \\WhitespaceOnly: /PblcOrdrBooksDeltaRprt/OrdrbookList[0]/OrdrBook[0]: "dlvryAreaId": WhitespaceOnly (input: "  ")
     );
 }
 
 test "invalid XML is reported" {
-    var arena: std.heap.ArenaAllocator = .init(t.allocator);
-    defer arena.deinit();
-    var buf: [200]u8 = undefined;
-    var w: std.Io.Writer = .fixed(&buf);
-    try t.expectError(error.InvalidXml, parseOrderBookDelta(t.allocator, arena.allocator(), "<a>\n<b></a>", &w));
-    try t.expectEqualStrings("InvalidXml: invalid XML at line 2, column 4: end tag does not match start tag", w.buffered());
+    try expectError(error.InvalidXml, "<a>\n<b></a>", "InvalidXml: invalid XML at line 2, column 4: end tag does not match start tag");
 }
 
 test "out of memory" {
