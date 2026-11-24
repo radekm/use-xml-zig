@@ -30,6 +30,7 @@ test {
     _ = @import("parser_test.zig");
     _ = @import("elem_test.zig");
     _ = @import("unused_test.zig");
+    _ = @import("fuzz_test.zig");
     _ = @import("Timestamp.zig");
     _ = @import("parse.zig");
 }

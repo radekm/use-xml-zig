@@ -51,6 +51,8 @@ Než začneš cokoli dělat, přečti si tento soubor a [PLAN.cs.md](PLAN.cs.md)
 
 - Každá funkce i každá oprava chyby přichází s testy.
 - Testy jsou vedle kódu (bloky `test`) nebo v `tests/`. `zig build test` spustí všechny.
+- `src/fuzz_test.zig` kontroluje náhodné dokumenty a náhodné použití API. Po změnách parseru nebo
+  API elementu spusť navíc `zig build test -Doptimize=ReleaseSafe --fuzz=1M`.
 
 ## Údržba plánu
 

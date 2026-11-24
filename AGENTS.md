@@ -51,6 +51,8 @@ Read this file and [PLAN.md](PLAN.md) before starting any work.
 
 - Every feature and every bug fix comes with tests.
 - Tests live next to the code (`test` blocks) or in `tests/`. `zig build test` runs all of them.
+- `src/fuzz_test.zig` checks random documents and random API use. After changes to the parser or
+  to the element API, also run `zig build test -Doptimize=ReleaseSafe --fuzz=1M`.
 
 ## Plan maintenance
 
