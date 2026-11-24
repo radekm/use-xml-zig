@@ -348,16 +348,16 @@ fn callParser(e: *Elem, comptime parser: anytype, args: anytype, selector: ?[]co
     }
 }
 
-/// Internal: finds a group of children by local name.
-pub fn findGroup(e: *const Elem, local_name: []const u8) ?*Group {
+/// Finds a group of children by local name.
+fn findGroup(e: *const Elem, local_name: []const u8) ?*Group {
     for (e.groups) |*g| {
         if (std.mem.eql(u8, g.local_name, local_name)) return g;
     }
     return null;
 }
 
-/// Internal: finds an attribute by local name.
-pub fn findAttr(e: *const Elem, local_name: []const u8) ?*Attr {
+/// Finds an attribute by local name.
+fn findAttr(e: *const Elem, local_name: []const u8) ?*Attr {
     for (e.attrs) |*a| {
         if (std.mem.eql(u8, a.local_name, local_name)) return a;
     }

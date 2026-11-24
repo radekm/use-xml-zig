@@ -6,14 +6,20 @@ const Document = @import("Document.zig");
 const Elem = @import("Elem.zig");
 const ParseDiagnostics = @import("ParseDiagnostics.zig");
 
+// These helpers read the fields directly, so that the tests don't mark anything as used.
+
 fn group(e: *const Elem, name: []const u8) []const *Elem {
-    const g = e.findGroup(name) orelse return &.{};
-    return g.elems;
+    for (e.groups) |g| {
+        if (std.mem.eql(u8, g.local_name, name)) return g.elems;
+    }
+    return &.{};
 }
 
 fn attrValue(e: *const Elem, name: []const u8) ?[]const u8 {
-    const a = e.findAttr(name) orelse return null;
-    return a.value;
+    for (e.attrs) |a| {
+        if (std.mem.eql(u8, a.local_name, name)) return a.value;
+    }
+    return null;
 }
 
 fn isInside(outer: []const u8, inner: []const u8) bool {
