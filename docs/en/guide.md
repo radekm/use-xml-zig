@@ -172,6 +172,10 @@ Values come in two flavours:
 The usual pattern is to parse in a function, copy what you need into your own structures with an
 arena (as in the quick start), and free the document before returning.
 
+A document is **not thread-safe**, not even for reading: every extraction function (`attr`,
+`child`, `text`, …) changes it, because it records what was used. Use one document from one thread
+at a time; different documents can be used in parallel.
+
 ## Errors
 
 Zig errors can't carry data, so the details are stored separately:

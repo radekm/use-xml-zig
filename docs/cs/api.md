@@ -209,6 +209,13 @@ zprávou v `doc.diagnostics()`.
    `null` / prázdný slice). Selžou jen `attr` a `child`.
 4. Na pořadí dotazů nezáleží.
 
+### Vlákna
+
+Dokument **není thread-safe**, a to ani pro čtení: každá extrakční funkce ho mění (označuje data
+jako použitá, pamatuje si chybějící jména v areně dokumentu a zapisuje `doc.diagnostics()`).
+Dokument a jeho elementy používej vždy jen z jednoho vlákna naráz. Různé dokumenty lze používat
+z různých vláken.
+
 ## Nepoužitá data
 
 Po extrakci projde `doc.unused()` všechny *navštívené* elementy (kořen a všechny elementy vrácené
@@ -238,8 +245,9 @@ while (it.next()) |u| std.log.warn("unused: {f}", .{u});
 - Atributy `xmlns` / `xmlns:*` se nikdy nehlásí.
 - `doc.expectAllUsed()` je zkratka, která selže s `error.UnusedData` u první položky a popíše ji
   v `doc.diagnostics()`.
-- Žádná z obou funkcí nealokuje ani nic nemění, takže je lze volat opakovaně; výsledek vždy
-  odpovídá aktuálnímu stavu.
+- Žádná z obou funkcí nealokuje ani nemění, co je označené jako použité, takže je lze volat
+  opakovaně; výsledek vždy odpovídá aktuálnímu stavu. `unused()` nemění vůbec nic;
+  `expectAllUsed()` jen zapíše svůj popis do `doc.diagnostics()`.
 
 Příklad (z testů UseData.Xml):
 

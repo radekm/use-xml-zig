@@ -1,4 +1,8 @@
 //! A parsed XML document.
+//!
+//! Not thread-safe, not even for reading: extraction functions change the document (they mark
+//! data as used, remember missing names and record diagnostics). Use a document and its elements
+//! from one thread at a time.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -86,7 +90,7 @@ pub fn unused(doc: *Document) UnusedIterator {
 }
 
 /// Returns error.UnusedData if anything was not used; `diagnostics()` then describes
-/// the first unused item. Call it after extraction.
+/// the first unused item (that is the only thing it changes). Call it after extraction.
 pub fn expectAllUsed(doc: *Document) error{UnusedData}!void {
     var it = doc.unused();
     const u = it.next() orelse return;

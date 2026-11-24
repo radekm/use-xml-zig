@@ -171,6 +171,10 @@ Hodnoty jsou dvojího druhu:
 Obvyklý postup je parsovat ve funkci, potřebná data zkopírovat do vlastních struktur pomocí areny
 (jako v rychlém startu) a dokument před návratem uvolnit.
 
+Dokument **není thread-safe**, a to ani pro čtení: každá extrakční funkce (`attr`, `child`,
+`text`, …) ho mění, protože zaznamenává, co bylo použito. Jeden dokument používejte vždy jen
+z jednoho vlákna naráz; různé dokumenty lze zpracovávat paralelně.
+
 ## Chyby
 
 Chyby v Zigu nemohou nést data, proto se podrobnosti ukládají zvlášť:

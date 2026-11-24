@@ -210,6 +210,13 @@ name is the message in `doc.diagnostics()`.
    `null` / an empty slice). Only `attr` and `child` fail.
 4. The order of requests doesn't matter.
 
+### Threads
+
+A document is **not thread-safe**, not even for reading: every extraction function changes it
+(it marks data as used, remembers missing names in the document's arena and records
+`doc.diagnostics()`). Use a document and its elements from one thread at a time. Different
+documents can be used from different threads.
+
 ## Unused data
 
 After extraction, `doc.unused()` walks all *visited* elements (the root and all elements returned
@@ -239,8 +246,9 @@ while (it.next()) |u| std.log.warn("unused: {f}", .{u});
 - `xmlns` / `xmlns:*` attributes are never reported.
 - `doc.expectAllUsed()` is a shortcut that fails with `error.UnusedData` on the first entry and
   describes it in `doc.diagnostics()`.
-- Neither function allocates nor changes anything, so they can be called repeatedly; the result
-  always reflects the current state.
+- Neither function allocates nor changes what is marked as used, so they can be called
+  repeatedly; the result always reflects the current state. `unused()` changes nothing at all;
+  `expectAllUsed()` only records its description in `doc.diagnostics()`.
 
 Example (from the UseData.Xml tests):
 
