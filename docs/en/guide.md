@@ -101,7 +101,9 @@ A few rules:
   A second request fails with `error.AlreadyUsed`. This also applies to names that don't exist
   (`attrOpt("x")` twice is an error). It catches code that processes the same data twice.
 - **Names are local names.** Namespace prefixes are ignored (`<h:table>` is `"table"`), and
-  `xmlns` attributes are invisible.
+  `xmlns` attributes are invisible. Collisions of local names are an error: `Document.parse`
+  rejects two attributes with the same local name (`<a p:x="1" q:x="2"/>`) and child elements
+  with the same local name and different prefixes (`<p:a/><q:a/>`).
 - **Text** is the text inside the element including CDATA sections, with whitespace kept as it is.
   An empty element has the text `""`. Elements with child elements have no text; whitespace
   between child elements is ignored, other text next to child elements (mixed content) is

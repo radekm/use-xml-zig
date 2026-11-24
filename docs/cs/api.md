@@ -266,6 +266,13 @@ v `Options.diagnostics`. Hook nesmí být generický (jeho množina chyb musí b
 3. Ptát se na jméno, které neexistuje, je v pořádku (`attrOpt`, `childOpt`, `children` vrátí
    `null` / prázdný slice). Selžou jen `attr` a `child`.
 4. Na pořadí dotazů nezáleží.
+5. Jména jsou **lokální**: prefixy namespaců se ignorují a atributy `xmlns` nejsou vidět. Aby
+   bylo každé jméno jednoznačné, **kolize lokálních jmen jsou chyba**: `Document.parse` selže
+   s `error.InvalidXml`, když má element dva atributy se stejným lokálním jménem
+   (`<a p:x="1" q:x="2"/>`, „multiple attributes with the same local name“) nebo podelementy se
+   stejným lokálním jménem a různými prefixy (`<r><p:a/><q:a/></r>`, „child elements with the
+   same local name have different prefixes“). Podelementy se stejným jménem i prefixem jsou
+   v pořádku; tvoří jednu skupinu pro `children`.
 
 ### Vlákna
 

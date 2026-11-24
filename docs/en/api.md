@@ -267,6 +267,13 @@ to be known).
 3. Asking for a name that is not present is fine (`attrOpt`, `childOpt`, `children` return
    `null` / an empty slice). Only `attr` and `child` fail.
 4. The order of requests doesn't matter.
+5. Names are **local names**: namespace prefixes are ignored and `xmlns` attributes are invisible.
+   So that every name is unambiguous, **collisions of local names are an error**: `Document.parse`
+   fails with `error.InvalidXml` if an element has two attributes with the same local name
+   (`<a p:x="1" q:x="2"/>`, "multiple attributes with the same local name") or child elements
+   with the same local name and different prefixes (`<r><p:a/><q:a/></r>`, "child elements with
+   the same local name have different prefixes"). Children with the same name and the same prefix
+   are fine; they form one group for `children`.
 
 ### Threads
 

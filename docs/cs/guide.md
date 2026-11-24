@@ -101,7 +101,9 @@ Několik pravidel:
   Druhý dotaz selže s `error.AlreadyUsed`. Platí to i pro jména, která neexistují
   (`attrOpt("x")` dvakrát je chyba). Odhalí se tak kód, který zpracovává stejná data dvakrát.
 - **Jména jsou lokální.** Prefixy namespaců se ignorují (`<h:table>` je `"table"`) a atributy
-  `xmlns` nejsou vidět.
+  `xmlns` nejsou vidět. Kolize lokálních jmen jsou chyba: `Document.parse` odmítne dva atributy
+  se stejným lokálním jménem (`<a p:x="1" q:x="2"/>`) i podelementy se stejným lokálním jménem
+  a různými prefixy (`<p:a/><q:a/>`).
 - **Text** je text uvnitř elementu včetně sekcí CDATA, bílé znaky zůstávají, jak jsou.
   Prázdný element má text `""`. Elementy s podelementy text nemají; bílé znaky mezi podelementy se
   ignorují, jiný text vedle podelementů (smíšený obsah) odmítne už parser.
