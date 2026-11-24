@@ -97,7 +97,7 @@ pub const Document = struct {
     pub fn diagnostics(doc: *const Document) Diagnostics;
 
     /// Iterates over elements that have unused content (see "Unused data").
-    pub fn unused(doc: *Document) UnusedIterator;
+    pub fn unused(doc: *const Document) UnusedIterator;
     /// Returns error.UnusedData if anything was not used; `diagnostics()` describes it.
     pub fn expectAllUsed(doc: *Document) error{UnusedData}!void;
 };
@@ -226,9 +226,12 @@ something unused:
 ```zig
 pub const Unused = struct {
     elem: *const Elem,                    // where (use elem.path() for a printable path)
-    attrs: UnusedAttrIterator,            // unused attributes: next() ?UnusedAttr{ .name, .value }
-    children: UnusedChildNameIterator,    // names of child groups that were never requested
     text: ?[]const u8,                    // unused text, or null
+
+    /// Unused attributes: `next() ?UnusedAttr{ .name, .value }`.
+    pub fn attrs(u: Unused) UnusedAttrIterator;
+    /// Names of child groups that were never requested: `next() ?[]const u8`.
+    pub fn childNames(u: Unused) UnusedChildNameIterator;
 
     /// Prints e.g. `/company/address[0]: attributes: zip="1"; child elements: city; text: "x"`.
     pub fn format(u: Unused, w: *std.Io.Writer) std.Io.Writer.Error!void;

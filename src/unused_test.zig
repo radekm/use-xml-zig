@@ -37,13 +37,30 @@ test "unused element" {
     var it = doc.unused();
     const u = it.next().?;
     try t.expectEqualStrings("address", u.elem.name());
-    var attrs = u.attrs;
+    var attrs = u.attrs();
     try t.expectEqual(null, attrs.next());
-    var children = u.children;
+    var children = u.childNames();
     try t.expectEqualStrings("city", children.next().?);
     try t.expectEqual(null, children.next());
     try t.expectEqual(null, u.text);
     try t.expectEqual(null, it.next());
+}
+
+test "unused entries can be read from a const document and a const capture" {
+    var doc = try Document.parse(t.allocator, "<a x=\"1\" y=\"2\"><b/><c/></a>", .{});
+    defer doc.deinit();
+    const const_doc: *const Document = &doc;
+    var it = const_doc.unused();
+    var names: [4][]const u8 = undefined;
+    var n: usize = 0;
+    while (it.next()) |u| {
+        var attrs = u.attrs();
+        while (attrs.next()) |a| : (n += 1) names[n] = a.name;
+        var children = u.childNames();
+        while (children.next()) |name| : (n += 1) names[n] = name;
+    }
+    try t.expectEqual(4, n);
+    for ([_][]const u8{ "x", "y", "b", "c" }, names) |want, got| try t.expectEqualStrings(want, got);
 }
 
 test "unused attribute" {

@@ -87,7 +87,7 @@ pub fn diagnostics(doc: *const Document) Diagnostics {
 
 /// Iterates over visited elements (the root and all elements returned by `child*` / `children`)
 /// that have unused content, in document order.
-pub fn unused(doc: *Document) UnusedIterator {
+pub fn unused(doc: *const Document) UnusedIterator {
     return .{ .elems = doc.ctx.elems };
 }
 
@@ -98,8 +98,8 @@ pub fn expectAllUsed(doc: *Document) error{UnusedData}!void {
     const u = it.next() orelse return;
     const d = &doc.ctx.diag;
     d.* = .{ .kind = .unused_data, .elem = u.elem };
-    var attrs = u.attrs;
-    var children = u.children;
+    var attrs = u.attrs();
+    var children = u.childNames();
     if (attrs.next()) |a| {
         d.selector = a.name;
         d.input = a.value;
@@ -135,42 +135,46 @@ pub const UnusedIterator = struct {
 /// Unused content of one visited element.
 pub const Unused = struct {
     elem: *const Elem,
-    /// Unused attributes (`xmlns` / `xmlns:*` are never reported).
-    attrs: UnusedAttrIterator,
-    /// Names of child groups that were never requested. Their content is not examined.
-    children: UnusedChildNameIterator,
     /// Unused text, or null. Whitespace-only text without CDATA is never reported.
     text: ?[]const u8,
 
     fn of(e: *const Elem) Unused {
         return .{
             .elem = e,
-            .attrs = .{ .attrs = e.attrs },
-            .children = .{ .groups = e.groups },
             .text = if (!e.text_used and e.text_significant) e.text_content else null,
         };
     }
 
+    /// Iterates over unused attributes (`xmlns` / `xmlns:*` are never reported).
+    pub fn attrs(u: Unused) UnusedAttrIterator {
+        return .{ .attrs = u.elem.attrs };
+    }
+
+    /// Iterates over names of child groups that were never requested. Their content is not examined.
+    pub fn childNames(u: Unused) UnusedChildNameIterator {
+        return .{ .groups = u.elem.groups };
+    }
+
     fn isEmpty(u: Unused) bool {
-        var attrs = u.attrs;
-        var children = u.children;
-        return attrs.next() == null and children.next() == null and u.text == null;
+        var attr_it = u.attrs();
+        var child_it = u.childNames();
+        return attr_it.next() == null and child_it.next() == null and u.text == null;
     }
 
     /// Prints e.g. `/company/address[0]: attributes: zip="12345"; child elements: city; text: "x"`.
     pub fn format(u: Unused, w: *std.Io.Writer) std.Io.Writer.Error!void {
         try w.print("{f}:", .{u.elem.path()});
         var sep: []const u8 = " ";
-        var attrs = u.attrs;
-        if (attrs.next()) |first| {
+        var attr_it = u.attrs();
+        if (attr_it.next()) |first| {
             try w.print("{s}attributes: {s}=\"{s}\"", .{ sep, first.name, first.value });
-            while (attrs.next()) |a| try w.print(", {s}=\"{s}\"", .{ a.name, a.value });
+            while (attr_it.next()) |a| try w.print(", {s}=\"{s}\"", .{ a.name, a.value });
             sep = "; ";
         }
-        var children = u.children;
-        if (children.next()) |first| {
+        var child_it = u.childNames();
+        if (child_it.next()) |first| {
             try w.print("{s}child elements: {s}", .{ sep, first });
-            while (children.next()) |name| try w.print(", {s}", .{name});
+            while (child_it.next()) |name| try w.print(", {s}", .{name});
             sep = "; ";
         }
         if (u.text) |text| try w.print("{s}text: \"{s}\"", .{ sep, text });
