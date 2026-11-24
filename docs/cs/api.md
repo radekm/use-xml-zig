@@ -424,7 +424,8 @@ var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
 - Jména a hodnoty delší než 1024 bajtů se zkrátí (`…`), aby se zbytek popisu vešel. Cesta delší než
   zhruba 1024 bajtů se zkrátí od začátku (`/…/b[0]/c[1]`). Když se celý popis do bufferu nevejde,
   ořízne se na hranici UTF-8 znaku a nastaví se `truncated`. S prázdným bufferem (`.init(&.{})`) se
-  zaznamená jen `kind`, `line` a `column`.
+  zaznamená jen `kind`, `line` a `column`. Popis je vždy platné UTF-8: neplatné UTF-8 ve jménech,
+  která předáte, se nahradí znakem U+FFFD.
 - Bez `Options.diagnostics` se nic nezaznamená ani neformátuje, takže chyby nic navíc nestojí
   (např. když se `childOpt` / `catch` používá k řízení toku).
 

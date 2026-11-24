@@ -158,16 +158,46 @@ const ShortPath = struct {
     }
 };
 
-/// Prints at most `max_input_len` bytes of a string, followed by `…` if it is longer.
+/// Prints at most `max_input_len` bytes of a string, followed by `…` if it is longer. The string
+/// is cut between UTF-8 sequences. Invalid UTF-8 (possible in names passed in by the user) is
+/// replaced by U+FFFD, so that the description is always valid UTF-8.
 const Shortened = struct {
     s: []const u8,
 
     pub fn format(sh: Shortened, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        if (sh.s.len <= max_input_len) return w.writeAll(sh.s);
-        try w.writeAll(sh.s[0..charBoundary(sh.s, max_input_len)]);
-        try w.writeAll("…");
+        // Only the printed part is examined, so long values cost nothing extra.
+        const replacement = "\u{FFFD}";
+        var i: usize = 0;
+        var printed: usize = 0; // bytes printed (or about to be printed) so far
+        var valid_start: usize = 0; // start of the run of valid sequences not yet written
+        while (i < sh.s.len) {
+            const n = validSequenceLen(sh.s[i..]);
+            const out_len = if (n == 0) replacement.len else n;
+            if (printed + out_len > max_input_len) {
+                try w.writeAll(sh.s[valid_start..i]);
+                return w.writeAll("…");
+            }
+            printed += out_len;
+            if (n == 0) {
+                try w.writeAll(sh.s[valid_start..i]);
+                try w.writeAll(replacement);
+                i += 1;
+                valid_start = i;
+            } else {
+                i += n;
+            }
+        }
+        try w.writeAll(sh.s[valid_start..]);
     }
 };
+
+/// Length of the valid UTF-8 sequence at the start of `s`, or 0 if it is invalid.
+fn validSequenceLen(s: []const u8) usize {
+    const n = std.unicode.utf8ByteSequenceLength(s[0]) catch return 0;
+    if (n > s.len) return 0;
+    _ = std.unicode.utf8Decode(s[0..n]) catch return 0;
+    return n;
+}
 
 fn shortened(s: []const u8) Shortened {
     return .{ .s = s };
@@ -183,14 +213,6 @@ fn finish(d: *Diagnostics, w: *std.Io.Writer, result: std.Io.Writer.Error!void) 
         d.truncated = true;
         d.len = completePrefix(written);
     }
-}
-
-/// The largest `end <= max` such that `s[0..end]` doesn't end inside a UTF-8 sequence.
-/// Requires `max < s.len`.
-fn charBoundary(s: []const u8, max: usize) usize {
-    var end = max;
-    while (end > 0 and s[end] & 0xC0 == 0x80) end -= 1;
-    return end;
 }
 
 /// Length of `s` without an incomplete UTF-8 sequence at its end (`s` was cut at an arbitrary byte).
@@ -283,6 +305,17 @@ test "long inputs and small buffers are cut at UTF-8 boundaries" {
     d.record(.missing, null, null, null, "exactly 12 b");
     try t.expect(!d.truncated);
     try t.expectEqualStrings("exactly 12 b", d.message());
+
+    // Names passed in by the user may be invalid UTF-8: invalid bytes are replaced by U+FFFD.
+    d = .init(&buf);
+    d.record(.missing, null, "a\xffb\xc5", null, "attribute is missing");
+    try t.expectEqualStrings("\"a\u{FFFD}b\u{FFFD}\": attribute is missing", d.message());
+    var bad: [max_input_len + 100]u8 = undefined;
+    @memset(&bad, 0xFF);
+    d.record(.missing, null, &bad, null, "attribute is missing");
+    try t.expect(!d.truncated);
+    try t.expect(std.unicode.utf8ValidateSlice(d.message()));
+    try t.expect(std.mem.endsWith(u8, d.message(), "\u{FFFD}…\": attribute is missing"));
 
     // An empty buffer records only the kind.
     d = .init(&.{});

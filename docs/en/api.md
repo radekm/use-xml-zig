@@ -428,7 +428,8 @@ var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
   fits. A path longer than about 1024 bytes is shortened from the start (`/…/b[0]/c[1]`). If the
   whole description doesn't fit into the buffer, it is cut at a UTF-8 character boundary and
   `truncated` is set. With an empty buffer (`.init(&.{})`) only `kind`, `line` and `column` are
-  recorded.
+  recorded. The description is always valid UTF-8: invalid UTF-8 in names you pass in is replaced
+  by U+FFFD.
 - Without `Options.diagnostics` nothing is recorded or formatted, so errors cost nothing extra
   (e.g. when `childOpt` / `catch` is used for control flow).
 
