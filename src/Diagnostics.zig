@@ -115,11 +115,48 @@ pub fn record(
 }
 
 fn print(w: *std.Io.Writer, elem: ?*const Elem, selector: ?[]const u8, input: ?[]const u8, msg: []const u8) std.Io.Writer.Error!void {
-    if (elem) |e| try w.print("{f}: ", .{e.path()});
+    if (elem) |e| try w.print("{f}: ", .{ShortPath{ .elem = e }});
     if (selector) |s| try w.print("\"{f}\": ", .{shortened(s)});
     try w.writeAll(msg);
     if (input) |s| try w.print(" (input: \"{f}\")", .{shortened(s)});
 }
+
+/// Prints the path of an element like `Elem.Path`, but names are shortened like values and
+/// the path has at most about `max_input_len` bytes: the start of a longer path is replaced
+/// by `/…`. The element itself is always printed. Only the printed part of the path is walked,
+/// so the time doesn't depend on the depth of the element.
+const ShortPath = struct {
+    elem: *const Elem,
+
+    pub fn format(sp: ShortPath, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        // The topmost ancestor that still fits, and the number of printed segments.
+        var top = sp.elem;
+        var count: usize = 1;
+        var len = segmentLen(sp.elem);
+        while (top.parent_elem) |p| {
+            len += segmentLen(p);
+            if (len > max_input_len) break;
+            top = p;
+            count += 1;
+        }
+        if (top.parent_elem != null) try w.writeAll("/…");
+        var level = count;
+        while (level > 0) {
+            level -= 1;
+            var a = sp.elem;
+            for (0..level) |_| a = a.parent_elem.?;
+            try w.print("/{f}", .{shortened(a.local_name)});
+            if (a.parent_elem != null) try w.print("[{d}]", .{a.same_name_index});
+        }
+    }
+
+    /// Upper bound of the length of the segment printed for `e`.
+    fn segmentLen(e: *const Elem) usize {
+        const name_len = @min(e.local_name.len, max_input_len + "…".len);
+        const index_len = if (e.parent_elem != null) "[]".len + std.fmt.count("{d}", .{e.same_name_index}) else 0;
+        return "/".len + name_len + index_len;
+    }
+};
 
 /// Prints at most `max_input_len` bytes of a string, followed by `…` if it is longer.
 const Shortened = struct {

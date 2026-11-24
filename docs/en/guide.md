@@ -275,7 +275,8 @@ unused item in the diagnostics.
 - Elements may be nested at most `Options.max_depth` levels deep (default 256; the root has depth
   1, so 0 rejects every document). The parser doesn't use recursion, so even a large limit can't
   overflow the stack. Printing an element path takes time quadratic in its depth, so with a very
-  large limit (hundreds of thousands) error messages about deep elements get slow.
+  large limit (hundreds of thousands) `Elem.path` and the report of unused data get slow for deep
+  elements. Descriptions in `Diagnostics` print only the end of a long path, so they stay fast.
 
 ## Differences from UseData.Xml
 

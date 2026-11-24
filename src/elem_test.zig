@@ -391,6 +391,44 @@ test "...Alloc variants report out of memory" {
     try t.expectError(error.AlreadyUsed, f.root().attr([]const u8, "x"));
 }
 
+test "long element names and deep paths are shortened in diagnostics" {
+    const gpa = t.allocator;
+    var input: std.ArrayList(u8) = .empty;
+    defer input.deinit(gpa);
+    var diag_buf: [4096]u8 = undefined;
+    var diag: Diagnostics = .init(&diag_buf);
+
+    // A long element name doesn't push the rest of the description out of the buffer.
+    try input.append(gpa, '<');
+    try input.appendNTimes(gpa, 'n', 5000);
+    try input.appendSlice(gpa, "/>");
+    {
+        var doc = try Document.parse(gpa, input.items, .{ .diagnostics = &diag });
+        defer doc.deinit();
+        try t.expectError(error.Missing, doc.root().attr(u8, "x"));
+        try t.expect(!diag.truncated);
+        try t.expect(std.mem.startsWith(u8, diag.message(), "/nnnn"));
+        try t.expect(std.mem.endsWith(u8, diag.message(), "n…: \"x\": attribute is missing"));
+    }
+
+    // A deep path is shortened from the start; the end (the element itself) is kept.
+    const depth = 3000;
+    input.clearRetainingCapacity();
+    for (0..depth) |_| try input.appendSlice(gpa, "<a>");
+    for (0..depth) |_| try input.appendSlice(gpa, "</a>");
+    {
+        var doc = try Document.parse(gpa, input.items, .{ .diagnostics = &diag, .max_depth = depth });
+        defer doc.deinit();
+        var e = doc.root();
+        for (1..depth) |_| e = try e.child("a");
+        try t.expectError(error.Missing, e.attr(u8, "x"));
+        try t.expect(!diag.truncated);
+        try t.expect(std.mem.startsWith(u8, diag.message(), "/…/a[0]/a[0]"));
+        try t.expect(std.mem.endsWith(u8, diag.message(), "/a[0]/a[0]: \"x\": attribute is missing"));
+        try t.expect(diag.message().len < 2 * Diagnostics.max_input_len);
+    }
+}
+
 test "out of memory is recorded in diagnostics" {
     // A custom parser that runs out of memory.
     {

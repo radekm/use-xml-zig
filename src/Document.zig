@@ -22,7 +22,8 @@ pub const Options = struct {
     diagnostics: ?*Diagnostics = null,
     /// Maximum element nesting depth. Deeper input fails with error.InvalidXml.
     /// The root element has depth 1, so 0 rejects every document.
-    /// Printing paths (`Elem.path`, diagnostics) takes time quadratic in the depth.
+    /// Printing paths (`Elem.path`, the report of unused data) takes time quadratic in the depth;
+    /// `Diagnostics` print only the end of a long path.
     max_depth: u32 = 256,
 };
 

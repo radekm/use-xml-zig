@@ -274,7 +274,8 @@ v diagnostice.
 - Elementy smí být zanořené nejvýše `Options.max_depth` úrovní (výchozí 256; kořen má hloubku 1,
   takže 0 odmítne každý dokument). Parser nepoužívá rekurzi, takže ani velký limit nemůže přetéct
   zásobník. Výpis cesty k elementu trvá čas kvadratický v jeho hloubce, takže s velmi vysokým
-  limitem (stovky tisíc) jsou chybové zprávy o hluboko zanořených elementech pomalé.
+  limitem (stovky tisíc) jsou `Elem.path` a hlášení nepoužitých dat u hluboko zanořených elementů
+  pomalé. Popisy v `Diagnostics` vypisují jen konec dlouhé cesty, takže zůstávají rychlé.
 
 ## Rozdíly oproti UseData.Xml
 

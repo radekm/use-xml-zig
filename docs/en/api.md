@@ -85,7 +85,8 @@ pub const Document = struct {
         diagnostics: ?*Diagnostics = null,
         /// Maximum element nesting depth. Deeper input fails with error.InvalidXml.
         /// The root element has depth 1, so 0 rejects every document.
-        /// Printing paths (`Elem.path`, diagnostics) takes time quadratic in the depth.
+        /// Printing paths (`Elem.path`, the report of unused data) takes time quadratic in the depth;
+        /// `Diagnostics` print only the end of a long path.
         max_depth: u32 = 256,
     };
 
@@ -423,9 +424,10 @@ var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
   top). The `Diagnostics` value and its buffer must stay alive and in place until `doc.deinit()`,
   because the document writes into them.
 - Names and values longer than 1024 bytes are shortened (`…`) so that the rest of the description
-  fits. If the whole description doesn't fit into the buffer, it is cut at a UTF-8 character
-  boundary and `truncated` is set. With an empty buffer (`.init(&.{})`) only `kind`, `line` and
-  `column` are recorded.
+  fits. A path longer than about 1024 bytes is shortened from the start (`/…/b[0]/c[1]`). If the
+  whole description doesn't fit into the buffer, it is cut at a UTF-8 character boundary and
+  `truncated` is set. With an empty buffer (`.init(&.{})`) only `kind`, `line` and `column` are
+  recorded.
 - Without `Options.diagnostics` nothing is recorded or formatted, so errors cost nothing extra
   (e.g. when `childOpt` / `catch` is used for control flow).
 

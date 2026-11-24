@@ -85,7 +85,8 @@ pub const Document = struct {
         diagnostics: ?*Diagnostics = null,
         /// Maximum element nesting depth. Deeper input fails with error.InvalidXml.
         /// The root element has depth 1, so 0 rejects every document.
-        /// Printing paths (`Elem.path`, diagnostics) takes time quadratic in the depth.
+        /// Printing paths (`Elem.path`, the report of unused data) takes time quadratic in the depth;
+        /// `Diagnostics` print only the end of a long path.
         max_depth: u32 = 256,
     };
 
@@ -418,9 +419,10 @@ var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
 - Text **neukazuje do vstupu ani do dokumentu**, takže ho lze nahlásit i po `doc.deinit()`,
   typicky ve volajícím funkce, která parsuje (viz příklad na začátku). Hodnota `Diagnostics` i její
   buffer musí žít a zůstat na místě až do `doc.deinit()`, protože do nich dokument zapisuje.
-- Jména a hodnoty delší než 1024 bajtů se zkrátí (`…`), aby se zbytek popisu vešel. Když se celý
-  popis do bufferu nevejde, ořízne se na hranici UTF-8 znaku a nastaví se `truncated`. S prázdným
-  bufferem (`.init(&.{})`) se zaznamená jen `kind`, `line` a `column`.
+- Jména a hodnoty delší než 1024 bajtů se zkrátí (`…`), aby se zbytek popisu vešel. Cesta delší než
+  zhruba 1024 bajtů se zkrátí od začátku (`/…/b[0]/c[1]`). Když se celý popis do bufferu nevejde,
+  ořízne se na hranici UTF-8 znaku a nastaví se `truncated`. S prázdným bufferem (`.init(&.{})`) se
+  zaznamená jen `kind`, `line` a `column`.
 - Bez `Options.diagnostics` se nic nezaznamená ani neformátuje, takže chyby nic navíc nestojí
   (např. když se `childOpt` / `catch` používá k řízení toku).
 
