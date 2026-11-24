@@ -5,6 +5,7 @@ const t = std.testing;
 const Document = @import("Document.zig");
 const Elem = @import("Elem.zig");
 const Diagnostics = @import("Diagnostics.zig");
+const recording = @import("recording.zig");
 
 /// Diagnostics with a buffer, on the heap so that their address doesn't change when the
 /// fixture is moved (the document keeps a pointer to them).
@@ -471,6 +472,86 @@ test "long element names and deep paths are shortened in diagnostics" {
         try t.expect(std.mem.startsWith(u8, diag.message(), "/…/a[0]/a[0]"));
         try t.expect(std.mem.endsWith(u8, diag.message(), "/a[0]/a[0]: \"x\": attribute is missing"));
         try t.expect(diag.message().len < 2 * Diagnostics.max_input_len);
+    }
+}
+
+test "shortened paths in diagnostics keep multi-byte UTF-8 characters whole" {
+    const gpa = t.allocator;
+    var input: std.ArrayList(u8) = .empty;
+    defer input.deinit(gpa);
+    var diag_buf: [4096]u8 = undefined;
+    var diag: Diagnostics = .init(&diag_buf);
+    const tail = ": \"x\": attribute is missing";
+
+    // A long name of 2-, 3- and 4-byte characters, shifted so that the limit falls at every
+    // position inside a character.
+    for ([_][]const u8{ "ž", "€", "😀" }) |char| {
+        for (0..4) |shift| {
+            input.clearRetainingCapacity();
+            try input.append(gpa, '<');
+            try input.appendNTimes(gpa, 'a', shift);
+            for (0..2000) |_| try input.appendSlice(gpa, char);
+            try input.appendSlice(gpa, "/>");
+            const name = input.items[1 .. input.items.len - 2];
+
+            var doc = try Document.parse(gpa, input.items, .{ .diagnostics = &diag });
+            defer doc.deinit();
+            try t.expectError(error.Missing, doc.root().attr(u8, "x"));
+            const m = diag.message();
+            try t.expect(!diag.truncated);
+            try t.expect(std.unicode.utf8ValidateSlice(m));
+            try t.expect(std.mem.endsWith(u8, m, "…" ++ tail));
+            // The printed part of the name is a prefix of the name, cut as late as possible.
+            const printed = m[1 .. m.len - "…".len - tail.len];
+            try t.expect(std.mem.startsWith(u8, name, printed));
+            try t.expect(printed.len <= Diagnostics.max_input_len);
+            try t.expect(printed.len > Diagnostics.max_input_len - char.len);
+        }
+    }
+
+    // A deep path of multi-byte names: the printed path is a suffix of the full path, starts
+    // at a segment boundary and is valid UTF-8; small buffers cut it between characters.
+    const names = [_][]const u8{ "ž", "€uro", "😀", "a😀ž" };
+    const depth = 1500;
+    input.clearRetainingCapacity();
+    for (0..depth) |i| try input.print(gpa, "<{s}>", .{names[i % names.len]});
+    var i: usize = depth;
+    while (i > 0) {
+        i -= 1;
+        try input.print(gpa, "</{s}>", .{names[i % names.len]});
+    }
+    var doc = try Document.parse(gpa, input.items, .{ .diagnostics = &diag, .max_depth = depth });
+    defer doc.deinit();
+    var e = doc.root();
+    for (1..depth) |level| e = try e.child(names[level % names.len]);
+    try t.expectError(error.Missing, e.attr(u8, "x"));
+    const m = diag.message();
+    try t.expect(!diag.truncated);
+    try t.expect(std.unicode.utf8ValidateSlice(m));
+    try t.expect(std.mem.startsWith(u8, m, "/…/"));
+    try t.expect(std.mem.endsWith(u8, m, tail));
+    const printed = m["/…".len .. m.len - tail.len];
+    try t.expect(printed.len <= Diagnostics.max_input_len);
+
+    var full: std.Io.Writer.Allocating = .init(gpa);
+    defer full.deinit();
+    try full.writer.print("{f}", .{e.path()});
+    try t.expect(std.mem.endsWith(u8, full.written(), printed));
+    // `printed` starts at a segment boundary: right before it the full path has `]`.
+    const before = full.written()[full.written().len - printed.len - 1];
+    try t.expectEqual(']', before);
+
+    const whole = try gpa.dupe(u8, m);
+    defer gpa.free(whole);
+    var small_buf: [200]u8 = undefined;
+    for (0..small_buf.len) |n| {
+        var small: Diagnostics = .init(small_buf[0..n]);
+        recording.record(&small, .missing, e, "x", null, "attribute is missing");
+        try t.expect(small.truncated);
+        try t.expect(small.message().len <= n);
+        try t.expect(small.message().len + 4 > n); // cut only inside the last character
+        try t.expect(std.unicode.utf8ValidateSlice(small.message()));
+        try t.expect(std.mem.startsWith(u8, whole, small.message()));
     }
 }
 
