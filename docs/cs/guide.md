@@ -155,8 +155,8 @@ const unit = try img.attrWith("unit", use_xml.parse.oneOf(&.{ "px", "em" }));
 const created = try img.attr(use_xml.Timestamp, "created");
 ```
 
-- `attrWith` / `textWith` berou libovolnou funkci `fn ([]const u8) E!R`. Její chyba se vrátí
-  beze změny.
+- `attrWith` / `textWith` berou libovolnou funkci `fn ([]const u8) E!R`, i jako ukazatel
+  (`*const fn ([]const u8) E!R`). Její chyba se vrátí beze změny.
 - Parser, který potřebuje stav (např. hodnoty známé až za běhu), je hodnota s metodou
   `pub fn parse(self, []const u8) E!R`; místo funkce se předá tato hodnota (nebo ukazatel na ni):
 

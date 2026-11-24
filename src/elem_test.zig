@@ -256,6 +256,30 @@ test "custom parsers" {
     try t.expectEqual(null, try a.attrOptAllocWith(t.allocator, "v", splitWords));
 }
 
+test "custom parsers given as function pointers" {
+    var f = try Fixture.init("<a c=\"red\" d=\"blue\" w=\"x y\"><b>green</b><e>u v w</e></a>");
+    defer f.deinit();
+    const a = f.root();
+
+    // A pointer known only at run time, e.g. chosen from a table.
+    var parsers = [_]*const fn ([]const u8) error{UnknownColor}!Color{&Color.parse};
+    std.mem.doNotOptimizeAway(&parsers);
+    const color = parsers[0];
+    try t.expectEqual(Color.red, try a.attrWith("c", color));
+    try t.expectError(error.UnknownColor, a.attrWith("d", color));
+    try f.expectDiag(.invalid_value, "/a: \"d\": UnknownColor (input: \"blue\")");
+    try t.expectEqual(null, try a.attrOptWith("z", color));
+    try t.expectEqual(Color.green, try (try a.child("b")).textWith(color));
+
+    const split: *const fn (std.mem.Allocator, []const u8) error{OutOfMemory}![][]const u8 = &splitWords;
+    const words = try a.attrAllocWith(t.allocator, "w", split);
+    defer t.allocator.free(words);
+    try t.expectEqual(2, words.len);
+    const more = try (try a.child("e")).textAllocWith(t.allocator, split);
+    defer t.allocator.free(more);
+    try t.expectEqual(3, more.len);
+}
+
 test "custom parser for text with allocation" {
     var f = try Fixture.init("<a>one two three</a>");
     defer f.deinit();

@@ -153,8 +153,9 @@ pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) AttrOptError!?
     return try e.convert(T, null, a.value, a.local_name);
 }
 
-/// Value of attribute `attr_name` parsed by `parser`: a function `fn ([]const u8) E!R`, or a value
-/// with a method `parse(self, []const u8) E!R` (use it for parsers that need state).
+/// Value of attribute `attr_name` parsed by `parser`: a function `fn ([]const u8) E!R` (or a pointer
+/// to one), or a value with a method `parse(self, []const u8) E!R` (use it for parsers that need
+/// state).
 pub fn attrWith(e: *Elem, attr_name: []const u8, parser: anytype) WithResult(AttrLookupError, @TypeOf(parser)) {
     const a = try e.requiredAttr(attr_name);
     return e.callParser(parser, .{a.value}, a.local_name, a.value);
@@ -179,7 +180,7 @@ pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []con
 }
 
 /// Value of attribute `attr_name` parsed by `parser`, which gets `gpa`: a function
-/// `fn (Allocator, []const u8) E!R`, or a value with a method `parse(self, Allocator, []const u8) E!R`.
+/// `fn (Allocator, []const u8) E!R` (or a pointer to one), or a value with a method `parse(self, Allocator, []const u8) E!R`.
 pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, parser: anytype) WithResult(AttrLookupError, @TypeOf(parser)) {
     const a = try e.requiredAttr(attr_name);
     return e.callParser(parser, .{ gpa, a.value }, a.local_name, a.value);

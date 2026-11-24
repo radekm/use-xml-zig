@@ -212,9 +212,10 @@ pub const TextError = TextLookupError || ValueError;                            
 
 #### Custom parsers
 
-`parser` in the `...With` functions is either a **function** or a **value with a method `parse`**.
-A value can carry state known only at run time (allowed values from a configuration, a lookup
-table, a counter, …). It can also be a pointer, e.g. when `parse` changes the state.
+`parser` in the `...With` functions is either a **function** (also a pointer to a function, e.g.
+one chosen at run time) or a **value with a method `parse`**. A value can carry state known only
+at run time (allowed values from a configuration, a lookup table, a counter, …). It can also be a
+pointer, e.g. when `parse` changes the state.
 
 | Functions             | Function                         | Value with a method                            |
 |-----------------------|----------------------------------|------------------------------------------------|

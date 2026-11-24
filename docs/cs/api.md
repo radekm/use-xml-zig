@@ -212,9 +212,10 @@ pub const TextError = TextLookupError || ValueError;                            
 
 #### Vlastní parsery
 
-`parser` ve funkcích `...With` je buď **funkce**, nebo **hodnota s metodou `parse`**. Hodnota může
-nést stav známý až za běhu (povolené hodnoty z konfigurace, lookup tabulku, počítadlo, …). Může
-to být i ukazatel, např. když `parse` stav mění.
+`parser` ve funkcích `...With` je buď **funkce** (i ukazatel na funkci, např. zvolenou až za
+běhu), nebo **hodnota s metodou `parse`**. Hodnota může nést stav známý až za běhu (povolené
+hodnoty z konfigurace, lookup tabulku, počítadlo, …). Může to být i ukazatel, např. když `parse`
+stav mění.
 
 | Funkce                | Funkce                           | Hodnota s metodou                              |
 |-----------------------|----------------------------------|------------------------------------------------|

@@ -86,11 +86,18 @@ fn parseWithHook(comptime T: type, gpa: anytype, s: []const u8, failure: *Failur
 }
 
 /// The function called for a custom parser of type `Parser`: the parser itself if it is a
-/// function, otherwise its method `parse` (the parser may also be a pointer to such a value).
+/// function (or a pointer to a function), otherwise its method `parse` (the parser may also be
+/// a pointer to such a value).
 pub fn ParseFn(comptime Parser: type) type {
     switch (@typeInfo(Parser)) {
         .@"fn" => return Parser,
-        .pointer => |ptr| if (ptr.size == .one) return ParseFn(ptr.child),
+        .pointer => |ptr| if (ptr.size == .one) {
+            if (@typeInfo(ptr.child) == .@"fn") return ptr.child;
+            switch (@typeInfo(ptr.child)) {
+                .@"struct", .@"union", .@"enum", .@"opaque" => return ParseFn(ptr.child),
+                else => {},
+            }
+        },
         .@"struct", .@"union", .@"enum", .@"opaque" => if (@hasDecl(Parser, "parse")) {
             const F = @TypeOf(Parser.parse);
             if (@typeInfo(F) != .@"fn") @compileError(@typeName(Parser) ++ ".parse must be a function");
@@ -101,14 +108,23 @@ pub fn ParseFn(comptime Parser: type) type {
     @compileError("parser must be a function or a value with a method `parse`, got " ++ @typeName(Parser));
 }
 
-/// Calls a custom parser (a function, or a value with a method `parse`) with `args`.
+/// Calls a custom parser (a function, a pointer to a function, or a value with a method `parse`)
+/// with `args`.
 pub fn callParser(parser: anytype, args: anytype) @typeInfo(ParseFn(@TypeOf(parser))).@"fn".return_type.? {
-    if (@typeInfo(@TypeOf(parser)) == .@"fn") return @call(.auto, parser, args);
+    if (comptime isFunction(@TypeOf(parser))) return @call(.auto, parser, args);
     // Method call syntax takes care of `self` being a value or a pointer.
     return switch (args.len) {
         1 => parser.parse(args[0]),
         2 => parser.parse(args[0], args[1]),
         else => @compileError("unexpected number of parser arguments"),
+    };
+}
+
+fn isFunction(comptime P: type) bool {
+    return switch (@typeInfo(P)) {
+        .@"fn" => true,
+        .pointer => |ptr| ptr.size == .one and @typeInfo(ptr.child) == .@"fn",
+        else => false,
     };
 }
 
