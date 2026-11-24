@@ -18,6 +18,7 @@ const Allocator = std.mem.Allocator;
 const Document = @import("Document.zig");
 const Elem = @import("Elem.zig");
 const Diagnostics = @import("Diagnostics.zig");
+const recording = @import("recording.zig");
 const Timestamp = @import("Timestamp.zig");
 const parse = @import("parse.zig");
 
@@ -476,8 +477,8 @@ const Ex = struct {
         try x.elems.append(x.gpa, x.doc.root());
         var steps = x.r.uintLessThan(u32, 60);
         while (steps > 0) : (steps -= 1) {
-            // Internal: clear the diagnostics, so that `check` sees only what this call recorded.
-            x.diag.reset();
+            // Clear the diagnostics, so that `check` sees only what this call recorded.
+            recording.reset(x.diag);
             const e = x.elems.items[x.r.uintLessThan(usize, x.elems.items.len)];
             switch (x.r.uintLessThan(u32, 12)) {
                 0, 1, 2 => try x.attrOp(e, x.pickName(e, 0)),

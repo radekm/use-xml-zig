@@ -63,6 +63,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 | 2026-11-24 | `...Alloc` functions use only the `parseXmlAlloc` hook; a type with only `parseXml` can't be used with them (compile error), so an owned result never borrows the document. |
 | 2026-11-24 | After the review: a custom parser may also be a pointer to a function; a `parseXml` / `parseXmlAlloc` hook may return a value without an error. Diagnostics shorten long element paths from the start (`/…/b[0]`), replace invalid UTF-8 in names passed in by U+FFFD, and `"{f}"` prints the kind when nothing of the description fits into the buffer. |
 | 2026-11-24 | Errors of the value in `attr*` / `text*` without `With` depend on `T` (e.g. `text([]const u8)` can't fail with `InvalidValue` or `OutOfMemory`). The constants `AttrError`, `AttrOptError`, `TextError` and `ValueError` are removed; the rule is a table in `api.md`. |
+| 2026-11-24 | Writing into `Diagnostics` (`reset`, `record`, `recordInvalidXml`, `lineColumn`) lives in the internal `recording.zig`, which `root.zig` doesn't export. The public API of `Diagnostics` is only `init`, `message`, `format` and the fields; `reset` is not public. |
 | 2026-11-23 | Only the `master` branch is used. |
 
 ## Milestones

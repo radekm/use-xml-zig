@@ -7,6 +7,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Diagnostics = @import("Diagnostics.zig");
+const recording = @import("recording.zig");
 const Elem = @import("Elem.zig");
 const parser = @import("parser.zig");
 
@@ -46,10 +47,10 @@ pub const Context = struct {
 /// Parses the whole input. `input` must stay alive and unchanged until `deinit`.
 /// All internal memory comes from `gpa` (through an internal arena).
 pub fn parse(gpa: Allocator, input: []const u8, options: Options) ParseError!Document {
-    if (options.diagnostics) |d| d.reset();
+    if (options.diagnostics) |d| recording.reset(d);
     return parseInner(gpa, input, options) catch |err| {
         if (err == error.OutOfMemory) {
-            if (options.diagnostics) |d| d.record(.document_out_of_memory, null, null, null, "document out of memory");
+            if (options.diagnostics) |d| recording.record(d, .document_out_of_memory, null, null, null, "document out of memory");
         }
         return err;
     };
@@ -104,11 +105,11 @@ pub fn expectAllUsed(doc: *Document) error{UnusedData}!void {
     var attrs = u.attrs();
     var children = u.childNames();
     if (attrs.next()) |a| {
-        d.record(.unused_data, u.elem, a.name, a.value, "attribute was not used");
+        recording.record(d, .unused_data, u.elem, a.name, a.value, "attribute was not used");
     } else if (children.next()) |name| {
-        d.record(.unused_data, u.elem, name, null, "child elements were not used");
+        recording.record(d, .unused_data, u.elem, name, null, "child elements were not used");
     } else {
-        d.record(.unused_data, u.elem, null, u.text, "text was not used");
+        recording.record(d, .unused_data, u.elem, null, u.text, "text was not used");
     }
     return error.UnusedData;
 }

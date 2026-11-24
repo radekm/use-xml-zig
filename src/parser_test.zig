@@ -5,6 +5,7 @@ const t = std.testing;
 const Document = @import("Document.zig");
 const Elem = @import("Elem.zig");
 const Diagnostics = @import("Diagnostics.zig");
+const recording = @import("recording.zig");
 
 // These helpers read the fields directly, so that the tests don't mark anything as used.
 
@@ -270,7 +271,7 @@ test "many attributes and many groups of children (hash map lookup)" {
         var diag: Diagnostics = .init(&diag_buf);
         try t.expectError(error.InvalidXml, Document.parse(gpa, buf.items, .{ .diagnostics = &diag }));
         try t.expect(std.mem.endsWith(u8, diag.message(), c.message));
-        try t.expectEqual(Diagnostics.lineColumn(buf.items, offset).column, diag.column);
+        try t.expectEqual(recording.lineColumn(buf.items, offset).column, diag.column);
     }
 }
 

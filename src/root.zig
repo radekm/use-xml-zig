@@ -26,6 +26,7 @@ pub const parse = @import("parse.zig");
 test {
     std.testing.refAllDecls(@This());
     _ = @import("chars.zig");
+    _ = @import("recording.zig");
     _ = @import("parser.zig");
     _ = @import("parser_test.zig");
     _ = @import("elem_test.zig");

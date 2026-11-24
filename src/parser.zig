@@ -13,6 +13,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const chars = @import("chars.zig");
 const Document = @import("Document.zig");
+const recording = @import("recording.zig");
 const Elem = @import("Elem.zig");
 
 const Error = Document.ParseError;
@@ -142,7 +143,7 @@ const Parser = struct {
     }
 
     fn fail(p: *Parser, offset: usize, message: []const u8) error{InvalidXml} {
-        if (p.ctx.diag) |d| d.recordInvalidXml(p.input, offset, message);
+        if (p.ctx.diag) |d| recording.recordInvalidXml(d, p.input, offset, message);
         return error.InvalidXml;
     }
 

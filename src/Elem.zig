@@ -7,6 +7,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Document = @import("Document.zig");
 const Diagnostics = @import("Diagnostics.zig");
+const recording = @import("recording.zig");
 const value = @import("value.zig");
 
 const Elem = @This();
@@ -274,7 +275,7 @@ fn OptWithResult(comptime LookupError: type, comptime Parser: type) type {
 }
 
 fn report(e: *Elem, kind: Diagnostics.Kind, selector: ?[]const u8, input: ?[]const u8, message: []const u8) void {
-    if (e.ctx.diag) |d| d.record(kind, e, selector, input, message);
+    if (e.ctx.diag) |d| recording.record(d, kind, e, selector, input, message);
 }
 
 const document_oom_message = "document out of memory";
