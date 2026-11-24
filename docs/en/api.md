@@ -358,6 +358,11 @@ Errors are described in two places:
   so it is valid only until `doc.deinit()`. Being part of the document makes this lifetime
   obvious. `error.OutOfMemory` is not recorded.
 
+  It holds only the **last** error: every recorded error overwrites it, and nothing else changes
+  it. Calls that succeed and calls that fail with `error.OutOfMemory` leave the previous error in
+  place, so read `doc.diagnostics()` right after an error other than `OutOfMemory` (in `catch` or
+  `errdefer`). `kind != .none` only says that *some* earlier call failed.
+
 **Report extraction errors before calling `doc.deinit()`.** The code that parses the document is
 responsible for that. Typical pattern:
 

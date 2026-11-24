@@ -356,6 +356,11 @@ Chyby se popisují na dvou místech:
   `doc.deinit()`. Protože je součástí dokumentu, je tato doba platnosti zřejmá.
   `error.OutOfMemory` se nezaznamenává.
 
+  Drží jen **poslední** chybu: každá zaznamenaná chyba ji přepíše a nic jiného ji nemění. Volání,
+  která uspějí, a volání, která selžou s `error.OutOfMemory`, v ní nechají předchozí chybu, proto
+  `doc.diagnostics()` čti hned po jiné chybě než `OutOfMemory` (v `catch` nebo `errdefer`).
+  `kind != .none` říká jen to, že *nějaké* dřívější volání selhalo.
+
 **Chyby extrakce nahlas dřív, než zavoláš `doc.deinit()`.** Odpovídá za to kód, který dokument
 parsuje. Typický vzor:
 

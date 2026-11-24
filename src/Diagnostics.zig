@@ -5,6 +5,9 @@
 //! Slices point into the input or into the document, so a `Diagnostics` value is valid only
 //! until `Document.deinit`. Report the error before freeing the document.
 //! `error.OutOfMemory` is not recorded.
+//!
+//! It holds only the last error. Successful calls and `error.OutOfMemory` don't change it, so read
+//! it right after an error other than `OutOfMemory`.
 
 const std = @import("std");
 const Elem = @import("Elem.zig");
