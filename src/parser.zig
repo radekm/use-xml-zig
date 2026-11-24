@@ -182,8 +182,12 @@ const Parser = struct {
         if (p.startsWith("\xEF\xBB\xBF")) p.pos = 3;
         if (chars.findInvalid(p.input[p.pos..])) |bad| return p.fail(p.pos + bad.offset, bad.message);
 
-        if (p.startsWith("<?xml") and p.pos + 5 < p.input.len and chars.isSpace(p.input[p.pos + 5])) {
-            try p.parseXmlDecl();
+        if (p.startsWith("<?xml")) {
+            // `<?xml-stylesheet …?>` is a processing instruction, `<?xml?>` a broken declaration.
+            const after = p.pos + "<?xml".len;
+            if (after == p.input.len or chars.isSpace(p.input[after]) or p.input[after] == '?') {
+                try p.parseXmlDecl();
+            }
         }
 
         // Prolog.
@@ -402,6 +406,7 @@ const Parser = struct {
                 empty = true;
                 break;
             }
+            if (p.input[p.pos] == '/') return p.fail(p.pos, "expected '>' after '/'");
             if (!had_space) return p.fail(p.pos, "expected whitespace before attribute");
 
             const name_offset = p.pos;

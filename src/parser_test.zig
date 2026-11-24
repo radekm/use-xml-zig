@@ -327,6 +327,9 @@ test "invalid: prolog and epilog" {
     try expectInvalid("<?xml encoding=\"utf-8\"?><a/>", "unexpected pseudo-attribute in XML declaration", 1, 7);
     try expectInvalid("<?xml version=\"1.0\" standalone=\"maybe\"?><a/>", "standalone must be 'yes' or 'no'", 1, 33);
     try expectInvalid("<?xml version=\"1.0\"", "unterminated XML declaration", 1, 1);
+    try expectInvalid("<?xml", "unterminated XML declaration", 1, 1);
+    try expectInvalid("<?xml?><a/>", "XML declaration must contain version", 1, 1);
+    try expectInvalid("<?xml?version='1.0'?><a/>", "expected whitespace in XML declaration", 1, 6);
 }
 
 test "invalid: characters" {
@@ -349,6 +352,8 @@ test "invalid: tags and attributes" {
     try expectInvalid("<a p:x=\"1\" q:x=\"2\"/>", "multiple attributes with the same local name", 1, 12);
     try expectInvalid("<a x=\"1\"y=\"2\"/>", "expected whitespace before attribute", 1, 9);
     try expectInvalid("<a x=1/>", "expected quoted value", 1, 6);
+    try expectInvalid("<a/ >", "expected '>' after '/'", 1, 3);
+    try expectInvalid("<a x='1' / >", "expected '>' after '/'", 1, 10);
     try expectInvalid("<a x/>", "expected '=' after attribute name", 1, 5);
     try expectInvalid("<a x=\"1/>", "unterminated quoted value", 1, 6);
     try expectInvalid("<a x=\"<\"/>", "'<' is not allowed in attribute values", 1, 7);
