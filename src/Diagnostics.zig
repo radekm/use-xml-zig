@@ -72,9 +72,15 @@ pub fn message(d: *const Diagnostics) []const u8 {
     return d.buf[0..d.len];
 }
 
-/// Prints `message()` (followed by `…` if it was truncated), or `no error`.
+/// Prints `message()` (followed by `…` if it was truncated), or `no error`. If nothing of the
+/// description fits into the buffer (e.g. an empty buffer), prints the kind instead, e.g.
+/// `missing` or `invalid XML at line 2, column 4`.
 pub fn format(d: Diagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void {
     if (d.kind == .none) return w.writeAll("no error");
+    if (d.len == 0) {
+        if (d.kind == .invalid_xml) return w.print("invalid XML at line {d}, column {d}", .{ d.line, d.column });
+        return w.writeAll(@tagName(d.kind));
+    }
     try w.writeAll(d.message());
     if (d.truncated) try w.writeAll("…");
 }
@@ -275,6 +281,17 @@ test format {
     d.record(.missing, null, "x", "v", "attribute is missing");
     try t.expectEqualStrings("\"x\": attribute is missing (input: \"v\")", try std.fmt.bufPrint(&out, "{f}", .{d}));
     try t.expect(!d.truncated);
+
+    // Nothing of the description fits: the kind is printed instead.
+    d = .init(&.{});
+    d.record(.too_many, null, "x", null, "too many");
+    try t.expectEqualStrings("too_many", try std.fmt.bufPrint(&out, "{f}", .{d}));
+    d.recordInvalidXml("<a>\n<b>", 5, "unexpected end of input");
+    try t.expectEqualStrings("invalid XML at line 2, column 2", try std.fmt.bufPrint(&out, "{f}", .{d}));
+    var one: [1]u8 = undefined;
+    d = .init(&one);
+    d.record(.missing, null, null, null, "ž"); // the first character doesn't fit
+    try t.expectEqualStrings("missing", try std.fmt.bufPrint(&out, "{f}", .{d}));
 }
 
 test "long inputs and small buffers are cut at UTF-8 boundaries" {

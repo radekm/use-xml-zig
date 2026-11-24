@@ -395,7 +395,8 @@ pub const Diagnostics = struct {
     /// The description, e.g. `/company/address[0]: "city": attribute is missing` or
     /// `invalid XML at line 2, column 4: end tag does not match start tag`.
     pub fn message(d: *const Diagnostics) []const u8;
-    /// Prints `message()`, plus `…` if it was truncated (or `no error`).
+    /// Prints `message()`, plus `…` if it was truncated (or `no error`). If nothing of the
+    /// description fits, prints the kind (e.g. `missing`, `invalid XML at line 2, column 4`).
     pub fn format(d: Diagnostics, w: *std.Io.Writer) std.Io.Writer.Error!void;
 };
 ```
@@ -428,8 +429,8 @@ var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
   fits. A path longer than about 1024 bytes is shortened from the start (`/…/b[0]/c[1]`). If the
   whole description doesn't fit into the buffer, it is cut at a UTF-8 character boundary and
   `truncated` is set. With an empty buffer (`.init(&.{})`) only `kind`, `line` and `column` are
-  recorded. The description is always valid UTF-8: invalid UTF-8 in names you pass in is replaced
-  by U+FFFD.
+  recorded, and `"{f}"` prints the kind. The description is always valid UTF-8: invalid UTF-8 in
+  names you pass in is replaced by U+FFFD.
 - Without `Options.diagnostics` nothing is recorded or formatted, so errors cost nothing extra
   (e.g. when `childOpt` / `catch` is used for control flow).
 
