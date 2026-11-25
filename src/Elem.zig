@@ -281,7 +281,7 @@ fn useName(e: *Elem, comptime kind: NameKind, wanted: []const u8) error{ Already
         .attr => e.attrs.keys(),
         .child => e.child_groups.keys(),
     };
-    const found = switch (kind) {
+    const name_idx = switch (kind) {
         .attr => e.attrs.getIndex(wanted),
         .child => e.child_groups.getIndex(wanted),
     };
@@ -295,10 +295,10 @@ fn useName(e: *Elem, comptime kind: NameKind, wanted: []const u8) error{ Already
     }
     const arena = e.ctx.arena.allocator();
     // The key must not point to the caller's memory.
-    const key = if (found) |i| names[i] else arena.dupe(u8, wanted) catch
+    const key = if (name_idx) |i| names[i] else arena.dupe(u8, wanted) catch
         return e.reportDocumentOutOfMemory(wanted);
     used.putNoClobber(arena, key, {}) catch return e.reportDocumentOutOfMemory(wanted);
-    return found;
+    return name_idx;
 }
 
 /// Marks attribute `attr_name` as used and returns its value, or null if it doesn't exist.
