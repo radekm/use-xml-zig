@@ -181,7 +181,8 @@ Volání `text*` na elementu, který má podelementy, selže s `error.HasChildre
 ```zig
 /// Marks all attributes, child names and the text of `e` as used.
 /// Child elements are not visited, so their content is not reported either.
-pub fn ignoreAll(e: *Elem) void;
+/// Fails with `error.OutOfMemory` (and changes nothing) if the document's internal memory runs out.
+pub fn ignoreAll(e: *Elem) IgnoreError!void;
 ```
 
 #### Množina chyb
@@ -204,6 +205,7 @@ pub const ChildrenError = error{ AlreadyUsed, OutOfMemory };                    
 pub const AttrLookupError = error{ Missing, AlreadyUsed, OutOfMemory };         // finding a required attribute
 pub const AttrOptLookupError = error{ AlreadyUsed, OutOfMemory };               // finding an optional attribute
 pub const TextLookupError = error{ HasChildren, AlreadyUsed };                  // finding the text
+pub const IgnoreError = error{OutOfMemory};                                      // ignoreAll
 ```
 
 `attr*`, `attrOpt*` a `text*` bez `With` vrací chyby vyhledání a navíc `V`, chyby parsování
@@ -218,7 +220,7 @@ hodnoty typu `T`. `V` obsahuje jen chyby, které pro `T` můžou nastat:
 Hook přidá `InvalidValue`, pokud může selhat s jinou chybou než `OutOfMemory`, a `OutOfMemory`,
 pokud může selhat s ní. `text([]const u8)` tedy selže jen s `HasChildren` nebo `AlreadyUsed`
 a `text(u32)` nikdy neselže s `OutOfMemory`. `attr*` může selhat s `OutOfMemory` vždy, protože
-dokument si pamatuje vyžádaná jména, která neexistují.
+dokument si pamatuje vyžádaná jména.
 
 #### Vlastní parsery
 
@@ -277,7 +279,7 @@ v `Options.diagnostics`. Hook nesmí být generický (jeho množina chyb musí b
 ### Vlákna
 
 Dokument **není thread-safe**, a to ani pro čtení: každá extrakční funkce ho mění (označuje data
-jako použitá, pamatuje si chybějící jména v areně dokumentu a zapisuje `Options.diagnostics`).
+jako použitá, pamatuje si vyžádaná jména v areně dokumentu a zapisuje `Options.diagnostics`).
 Dokument a jeho elementy používej vždy jen z jednoho vlákna naráz. Různé dokumenty lze používat
 z různých vláken, každý s vlastní `Diagnostics`.
 
@@ -435,8 +437,8 @@ var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
 
 - **Zaznamená se každá chyba, kterou knihovna vrátí**: syntaktické chyby XML z `parse` (s `line`
   a `column`), chyby extrakčních funkcí a `expectAllUsed` i `error.OutOfMemory`. Dva druhy říkají,
-  kde paměť došla: `document_out_of_memory` (interní paměť dokumentu: v `parse` a při
-  zapamatování vyžádaných jmen, která neexistují) a `value_out_of_memory` (vytváření hodnoty:
+  kde paměť došla: `document_out_of_memory` (interní paměť dokumentu: v `parse`, při
+  zapamatování vyžádaných jmen a v `ignoreAll`) a `value_out_of_memory` (vytváření hodnoty:
   alokátor funkce `...Alloc`, nebo vlastní parser či hook `parseXmlAlloc`, který vrátil
   `error.OutOfMemory`).
 - Drží jen **poslední** chybu: každá chyba ji přepíše a nic jiného ji nemění. `parse` ji na
@@ -460,11 +462,13 @@ Příklad `examples/m7/m7.zig` ukazuje funkci, která dostane `?*Diagnostics` od
 
 - `Document.parse`: při `error.OutOfMemory` se uvolní vše, co se do té doby alokovalo, a žádný
   dokument se nevrátí. Diagnostika dostane druh `document_out_of_memory`.
-- Vyhledávání podle jména (`attr*`, `child*`, `children`) může vrátit `error.OutOfMemory` **jen
-  tehdy, když jméno v elementu neexistuje**: jméno se pak zkopíruje do interní areny dokumentu,
-  aby šlo odhalit druhé vyžádání. Existující jména žádnou alokaci nepotřebují.
-- `text*` bez alokátoru, `ignoreAll`, `unused`, `expectAllUsed` a `Diagnostics.format` nikdy
-  nealokují.
+- Vyhledávání podle jména (`attr*`, `child*`, `children`) může vrátit `error.OutOfMemory`: každé
+  vyžádané jméno se přidá do množiny použitých jmen (hashovací tabulky v interní areně dokumentu),
+  aby šlo odhalit druhé vyžádání. Jméno, které v elementu neexistuje, se navíc zkopíruje do areny.
+  Když se to nepovede, jméno se jako použité neoznačí.
+- `ignoreAll` přidá do těchto množin všechna jména elementu, takže také může vrátit
+  `error.OutOfMemory`. Pak nic nezmění.
+- `text*` bez alokátoru, `unused`, `expectAllUsed` a `Diagnostics.format` nikdy nealokují.
 - Funkce `...Alloc` vrátí `error.OutOfMemory`, když selže alokátor volajícího. Nic neunikne: paměť
   alokovaná pro neúspěšnou hodnotu se před návratem uvolní. Hodnoty vrácené dřívějšími voláními
   patří volajícímu, který je uvolní jako obvykle (`errdefer`).

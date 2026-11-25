@@ -268,8 +268,8 @@ const Ex = struct {
     }
 
     fn pickName(x: *Ex, e: *Elem, kind: u8) []const u8 {
-        if (kind == 0 and e.attrs.len > 0 and x.r.boolean()) return e.attrs[x.r.uintLessThan(usize, e.attrs.len)].local_name;
-        if (kind == 1 and e.groups.len > 0 and x.r.boolean()) return e.groups[x.r.uintLessThan(usize, e.groups.len)].local_name;
+        if (kind == 0 and e.attrs.count() > 0 and x.r.boolean()) return e.attrs.keys()[x.r.uintLessThan(usize, e.attrs.count())];
+        if (kind == 1 and e.child_groups.count() > 0 and x.r.boolean()) return e.child_groups.keys()[x.r.uintLessThan(usize, e.child_groups.count())];
         return names[x.r.uintLessThan(usize, names.len)];
     }
 
@@ -485,10 +485,10 @@ const Ex = struct {
                 3, 4, 5 => try x.childOp(e, x.pickName(e, 1)),
                 6, 7 => try x.textOp(e),
                 8 => if (x.r.uintLessThan(u32, 4) == 0) {
-                    e.ignoreAll();
+                    try e.ignoreAll();
                     // Everything is used now.
-                    for (e.attrs) |a| try x.used.append(x.gpa, .{ .elem = e, .kind = 0, .name = a.local_name });
-                    for (e.groups) |g| try x.used.append(x.gpa, .{ .elem = e, .kind = 1, .name = g.local_name });
+                    for (e.attrs.keys()) |name| try x.used.append(x.gpa, .{ .elem = e, .kind = 0, .name = name });
+                    for (e.child_groups.keys()) |name| try x.used.append(x.gpa, .{ .elem = e, .kind = 1, .name = name });
                     try x.used.append(x.gpa, .{ .elem = e, .kind = 2, .name = "" });
                 },
                 9 => {
@@ -511,7 +511,7 @@ const Ex = struct {
             }
         }
         // Ignoring every visited element must make everything used.
-        for (x.elems.items) |e| e.ignoreAll();
+        for (x.elems.items) |e| try e.ignoreAll();
         x.doc.expectAllUsed() catch |er| {
             var buf: [256]u8 = undefined;
             std.debug.print("after ignoreAll: {} {s}\n", .{ er, std.fmt.bufPrint(&buf, "{f}", .{x.diag.*}) catch "?" });

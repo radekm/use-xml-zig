@@ -198,7 +198,7 @@ test "text keeps whitespace and empty elements have empty text" {
 test "ignoreAll" {
     var f = try Fixture.init("<a x=\"1\"><b/></a>");
     defer f.deinit();
-    f.root().ignoreAll();
+    try f.root().ignoreAll();
     try t.expectError(error.AlreadyUsed, f.root().attr([]const u8, "x"));
     try t.expectError(error.AlreadyUsed, f.root().children("b"));
     try t.expectEqual(null, try f.root().attrOpt([]const u8, "y"));
@@ -212,7 +212,7 @@ test "visited elements" {
     const bs = try a.children("b");
     const c = try a.child("c");
     try t.expect(bs[0].visited and bs[1].visited and c.visited);
-    try t.expect(!a.groups[2].elems[0].visited); // d
+    try t.expect(!a.child_groups.values()[2][0].visited); // d
 }
 
 // ------------------------------------------------------------------ custom parsers and allocation
@@ -601,6 +601,60 @@ test "out of memory is recorded in diagnostics" {
         try t.expect(std.mem.startsWith(u8, diag.message(), "/a: \"nnnn"));
         try t.expect(std.mem.endsWith(u8, diag.message(), "n…\": document out of memory"));
         try t.expect(!diag.truncated);
+    }
+    // Remembering an existing name fails too. The name is not marked as used.
+    {
+        const gpa = t.allocator;
+        var input: std.ArrayList(u8) = .empty;
+        defer input.deinit(gpa);
+        const n = 20_000;
+        try input.appendSlice(gpa, "<a");
+        for (0..n) |i| try input.print(gpa, " x{d}=\"{d}\"", .{ i, i });
+        try input.appendSlice(gpa, "/>");
+
+        var failing: std.testing.FailingAllocator = .init(gpa, .{});
+        var diag_buf: [256]u8 = undefined;
+        var diag: Diagnostics = .init(&diag_buf);
+        var doc = try Document.parse(failing.allocator(), input.items, .{ .diagnostics = &diag });
+        defer doc.deinit();
+        failing.fail_index = failing.alloc_index; // fail from now on
+        var name_buf: [16]u8 = undefined;
+        var failed: ?[]const u8 = null;
+        for (0..n) |i| {
+            const name = try std.fmt.bufPrint(&name_buf, "x{d}", .{i});
+            _ = doc.root().attr(u32, name) catch |err| {
+                try t.expectEqual(error.OutOfMemory, err);
+                failed = name;
+                break;
+            };
+        }
+        try t.expect(failed != null);
+        try t.expectEqual(Diagnostics.Kind.document_out_of_memory, diag.kind);
+        failing.fail_index = std.math.maxInt(usize); // stop failing
+        try t.expect((try doc.root().attr(u32, failed.?)) < n);
+    }
+    // `ignoreAll` fails and changes nothing.
+    {
+        const gpa = t.allocator;
+        var input: std.ArrayList(u8) = .empty;
+        defer input.deinit(gpa);
+        const n = 20_000;
+        try input.appendSlice(gpa, "<a");
+        for (0..n) |i| try input.print(gpa, " x{d}=\"{d}\"", .{ i, i });
+        try input.appendSlice(gpa, ">text</a>");
+
+        var failing: std.testing.FailingAllocator = .init(gpa, .{});
+        var diag_buf: [256]u8 = undefined;
+        var diag: Diagnostics = .init(&diag_buf);
+        var doc = try Document.parse(failing.allocator(), input.items, .{ .diagnostics = &diag });
+        defer doc.deinit();
+        failing.fail_index = failing.alloc_index; // fail from now on
+        try t.expectError(error.OutOfMemory, doc.root().ignoreAll());
+        try t.expectEqual(Diagnostics.Kind.document_out_of_memory, diag.kind);
+        try t.expectEqualStrings("/a: document out of memory", diag.message());
+        failing.fail_index = std.math.maxInt(usize); // stop failing
+        try t.expectEqual(1234, try doc.root().attr(u32, "x1234"));
+        try t.expectEqualStrings("text", try doc.root().text([]const u8));
     }
 }
 

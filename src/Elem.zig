@@ -17,10 +17,15 @@ local_name: []const u8,
 parent_elem: ?*Elem,
 /// Index among siblings with the same local name.
 same_name_index: u32,
-/// Attributes without `xmlns` / `xmlns:*`, in document order.
-attrs: []Attr,
-/// Child elements grouped by local name, in order of the first occurrence.
-groups: []Group,
+/// Attributes without `xmlns` / `xmlns:*`: local name -> value, in document order.
+attrs: std.StringArrayHashMapUnmanaged([]const u8),
+/// Child elements grouped by local name: local name -> elements in document order.
+/// Groups are in order of the first occurrence.
+child_groups: std.StringArrayHashMapUnmanaged([]const *Elem),
+/// Requested attribute names (existing or not). Allocated in the document's arena.
+attrs_used: std.StringArrayHashMapUnmanaged(void) = .empty,
+/// Requested names of child elements (existing or not). Allocated in the document's arena.
+child_groups_used: std.StringArrayHashMapUnmanaged(void) = .empty,
 /// Text content. Always empty when the element has child elements.
 text_content: []const u8,
 /// The text contains a non-whitespace character or a CDATA section.
@@ -30,8 +35,6 @@ text_used: bool = false,
 /// The element was returned by `child*` / `children` (or is the root).
 /// Only visited elements are examined when reporting unused data.
 visited: bool = false,
-/// Names that were requested but don't exist in this element.
-missing: ?*Missing = null,
 
 /// All errors of the extraction functions. Details go to `Document.Options.diagnostics`.
 /// Each function returns only the subset that can actually happen (see below).
@@ -64,27 +67,8 @@ pub const AttrOptLookupError = error{ AlreadyUsed, OutOfMemory };
 pub const TextLookupError = error{ HasChildren, AlreadyUsed };
 // `attr(T, …)`, `text(T)`, … add the errors of parsing a value of type `T`, see `value.ValueError`.
 
-/// Internal: a requested name that doesn't exist in the element.
-pub const Missing = struct {
-    kind: enum { attr, child },
-    /// Copy owned by the document.
-    name: []const u8,
-    next: ?*Missing,
-};
-
-/// Internal: an attribute and its usage flag.
-pub const Attr = struct {
-    local_name: []const u8,
-    value: []const u8,
-    used: bool = false,
-};
-
-/// Internal: child elements with the same local name and their usage flag.
-pub const Group = struct {
-    local_name: []const u8,
-    elems: []const *Elem,
-    used: bool = false,
-};
+/// Errors of `ignoreAll`.
+pub const IgnoreError = error{OutOfMemory};
 
 /// Local name (without prefix).
 pub fn name(e: *const Elem) []const u8 {
@@ -135,13 +119,13 @@ pub const Path = struct {
 /// Strings are borrowed (valid while the document and the input live).
 pub fn attr(e: *Elem, comptime T: type, attr_name: []const u8) (AttrLookupError || value.ValueError(T, false))!T {
     const a = try e.requiredAttr(attr_name);
-    return e.convert(T, null, a.value, a.local_name);
+    return e.convert(T, null, a.value, a.name);
 }
 
 /// Like `attr`, but returns null if the attribute is missing.
 pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) (AttrOptLookupError || value.ValueError(T, false))!?T {
     const a = (try e.optionalAttr(attr_name)) orelse return null;
-    return try e.convert(T, null, a.value, a.local_name);
+    return try e.convert(T, null, a.value, a.name);
 }
 
 /// Value of attribute `attr_name` parsed by `parser`: a function `fn ([]const u8) E!R` (or a pointer
@@ -149,38 +133,38 @@ pub fn attrOpt(e: *Elem, comptime T: type, attr_name: []const u8) (AttrOptLookup
 /// state).
 pub fn attrWith(e: *Elem, attr_name: []const u8, parser: anytype) WithResult(AttrLookupError, @TypeOf(parser)) {
     const a = try e.requiredAttr(attr_name);
-    return e.callParser(parser, .{a.value}, a.local_name, a.value);
+    return e.callParser(parser, .{a.value}, a.name, a.value);
 }
 
 /// Like `attrWith`, but returns null if the attribute is missing.
 pub fn attrOptWith(e: *Elem, attr_name: []const u8, parser: anytype) OptWithResult(AttrOptLookupError, @TypeOf(parser)) {
     const a = (try e.optionalAttr(attr_name)) orelse return null;
-    return try e.callParser(parser, .{a.value}, a.local_name, a.value);
+    return try e.callParser(parser, .{a.value}, a.name, a.value);
 }
 
 /// Like `attr`, but the result is allocated with `gpa` (strings are copied).
 pub fn attrAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) (AttrLookupError || value.ValueError(T, true))!T {
     const a = try e.requiredAttr(attr_name);
-    return e.convert(T, gpa, a.value, a.local_name);
+    return e.convert(T, gpa, a.value, a.name);
 }
 
 /// Like `attrOpt`, but the result is allocated with `gpa` (strings are copied).
 pub fn attrOptAlloc(e: *Elem, gpa: Allocator, comptime T: type, attr_name: []const u8) (AttrOptLookupError || value.ValueError(T, true))!?T {
     const a = (try e.optionalAttr(attr_name)) orelse return null;
-    return try e.convert(T, gpa, a.value, a.local_name);
+    return try e.convert(T, gpa, a.value, a.name);
 }
 
 /// Value of attribute `attr_name` parsed by `parser`, which gets `gpa`: a function
 /// `fn (Allocator, []const u8) E!R` (or a pointer to one), or a value with a method `parse(self, Allocator, []const u8) E!R`.
 pub fn attrAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, parser: anytype) WithResult(AttrLookupError, @TypeOf(parser)) {
     const a = try e.requiredAttr(attr_name);
-    return e.callParser(parser, .{ gpa, a.value }, a.local_name, a.value);
+    return e.callParser(parser, .{ gpa, a.value }, a.name, a.value);
 }
 
 /// Like `attrAllocWith`, but returns null if the attribute is missing.
 pub fn attrOptAllocWith(e: *Elem, gpa: Allocator, attr_name: []const u8, parser: anytype) OptWithResult(AttrOptLookupError, @TypeOf(parser)) {
     const a = (try e.optionalAttr(attr_name)) orelse return null;
-    return try e.callParser(parser, .{ gpa, a.value }, a.local_name, a.value);
+    return try e.callParser(parser, .{ gpa, a.value }, a.name, a.value);
 }
 
 // ------------------------------------------------------------------ child elements
@@ -252,9 +236,15 @@ pub fn textAllocWith(e: *Elem, gpa: Allocator, parser: anytype) WithResult(TextL
 
 /// Marks all attributes, child names and the text of `e` as used.
 /// Child elements are not visited, so their content is not reported either.
-pub fn ignoreAll(e: *Elem) void {
-    for (e.attrs) |*a| a.used = true;
-    for (e.groups) |*g| g.used = true;
+/// Fails with `error.OutOfMemory` (and changes nothing) if the document's internal memory runs out.
+pub fn ignoreAll(e: *Elem) IgnoreError!void {
+    const arena = e.ctx.arena.allocator();
+    e.attrs_used.ensureUnusedCapacity(arena, e.attrs.count()) catch
+        return e.reportDocumentOutOfMemory(null);
+    e.child_groups_used.ensureUnusedCapacity(arena, e.child_groups.count()) catch
+        return e.reportDocumentOutOfMemory(null);
+    for (e.attrs.keys()) |k| e.attrs_used.putAssumeCapacity(k, {});
+    for (e.child_groups.keys()) |k| e.child_groups_used.putAssumeCapacity(k, {});
     e.text_used = true;
 }
 
@@ -278,73 +268,69 @@ fn report(e: *Elem, kind: Diagnostics.Kind, selector: ?[]const u8, input: ?[]con
 const document_oom_message = "document out of memory";
 const value_oom_message = "out of memory while producing the value";
 
-/// Records that the document's internal memory ran out while remembering `missing_name`.
-fn reportDocumentOutOfMemory(e: *Elem, missing_name: []const u8) error{OutOfMemory} {
-    e.report(.document_out_of_memory, missing_name, null, document_oom_message);
+/// Records that the document's internal memory ran out (while remembering `wanted_name`).
+fn reportDocumentOutOfMemory(e: *Elem, wanted_name: ?[]const u8) error{OutOfMemory} {
+    e.report(.document_out_of_memory, wanted_name, null, document_oom_message);
     return error.OutOfMemory;
 }
 
-/// Records that `wanted` (which doesn't exist) was requested. Returns the stored copy of `wanted`.
-fn useMissing(e: *Elem, kind: @FieldType(Missing, "kind"), wanted: []const u8, message: []const u8) error{ AlreadyUsed, OutOfMemory }![]const u8 {
-    var it = e.missing;
-    while (it) |m| : (it = m.next) {
-        if (m.kind == kind and std.mem.eql(u8, m.name, wanted)) {
-            e.report(.already_used, m.name, null, message);
-            return error.AlreadyUsed;
-        }
-    }
+/// Adds `wanted` to the set of used names `used`. `stored` is the name as stored in the element,
+/// or null if the element doesn't have it (then `wanted` is copied to the document's arena).
+/// Returns the name as stored in `used`.
+fn markUsed(
+    e: *Elem,
+    used: *std.StringArrayHashMapUnmanaged(void),
+    wanted: []const u8,
+    stored: ?[]const u8,
+    message: []const u8,
+) error{ AlreadyUsed, OutOfMemory }![]const u8 {
     const arena = e.ctx.arena.allocator();
-    const node = arena.create(Missing) catch return e.reportDocumentOutOfMemory(wanted);
-    const name_copy = arena.dupe(u8, wanted) catch return e.reportDocumentOutOfMemory(wanted);
-    node.* = .{ .kind = kind, .name = name_copy, .next = e.missing };
-    e.missing = node;
-    return node.name;
+    const gop = used.getOrPut(arena, wanted) catch return e.reportDocumentOutOfMemory(wanted);
+    if (gop.found_existing) {
+        e.report(.already_used, gop.key_ptr.*, null, message);
+        return error.AlreadyUsed;
+    }
+    // The key must not point to the caller's memory.
+    gop.key_ptr.* = stored orelse arena.dupe(u8, wanted) catch {
+        _ = used.pop();
+        return e.reportDocumentOutOfMemory(wanted);
+    };
+    return gop.key_ptr.*;
 }
 
 const attr_used_message = "attribute was already used";
 
-/// Marks attribute `attr_name` as used. Returns null and remembers the name if it doesn't exist.
-fn optionalAttr(e: *Elem, attr_name: []const u8) AttrOptLookupError!?*Attr {
-    if (e.findAttr(attr_name)) |a| {
-        if (a.used) {
-            e.report(.already_used, a.local_name, null, attr_used_message);
-            return error.AlreadyUsed;
-        }
-        a.used = true;
-        return a;
-    }
-    _ = try e.useMissing(.attr, attr_name, attr_used_message);
-    return null;
+const AttrUse = struct { name: []const u8, value: []const u8 };
+
+/// Marks attribute `attr_name` as used. Returns null if it doesn't exist.
+fn optionalAttr(e: *Elem, attr_name: []const u8) AttrOptLookupError!?AttrUse {
+    const i = e.attrs.getIndex(attr_name);
+    const stored = if (i) |j| e.attrs.keys()[j] else null;
+    const used_name = try e.markUsed(&e.attrs_used, attr_name, stored, attr_used_message);
+    const j = i orelse return null;
+    return .{ .name = used_name, .value = e.attrs.values()[j] };
 }
 
-fn requiredAttr(e: *Elem, attr_name: []const u8) AttrLookupError!*Attr {
-    if (e.findAttr(attr_name)) |a| {
-        if (a.used) {
-            e.report(.already_used, a.local_name, null, attr_used_message);
-            return error.AlreadyUsed;
-        }
-        a.used = true;
-        return a;
-    }
-    const stored = try e.useMissing(.attr, attr_name, attr_used_message);
-    e.report(.missing, stored, null, "attribute is missing");
-    return error.Missing;
+fn requiredAttr(e: *Elem, attr_name: []const u8) AttrLookupError!AttrUse {
+    const i = e.attrs.getIndex(attr_name);
+    const stored = if (i) |j| e.attrs.keys()[j] else null;
+    const used_name = try e.markUsed(&e.attrs_used, attr_name, stored, attr_used_message);
+    const j = i orelse {
+        e.report(.missing, used_name, null, "attribute is missing");
+        return error.Missing;
+    };
+    return .{ .name = used_name, .value = e.attrs.values()[j] };
 }
 
 const GroupUse = struct { name: []const u8, elems: []const *Elem };
 
-/// Marks the group of children named `child_name` as used (or remembers the missing name).
+/// Marks the group of children named `child_name` as used (it may not exist).
 fn useGroup(e: *Elem, child_name: []const u8) ChildrenError!GroupUse {
-    const message = "child elements were already used";
-    if (e.findGroup(child_name)) |g| {
-        if (g.used) {
-            e.report(.already_used, g.local_name, null, message);
-            return error.AlreadyUsed;
-        }
-        g.used = true;
-        return .{ .name = g.local_name, .elems = g.elems };
-    }
-    return .{ .name = try e.useMissing(.child, child_name, message), .elems = &.{} };
+    const i = e.child_groups.getIndex(child_name);
+    const stored = if (i) |j| e.child_groups.keys()[j] else null;
+    const used_name = try e.markUsed(&e.child_groups_used, child_name, stored, "child elements were already used");
+    const elems = if (i) |j| e.child_groups.values()[j] else &.{};
+    return .{ .name = used_name, .elems = elems };
 }
 
 fn useText(e: *Elem) TextLookupError!void {
@@ -353,7 +339,7 @@ fn useText(e: *Elem) TextLookupError!void {
         return error.AlreadyUsed;
     }
     e.text_used = true;
-    if (e.groups.len > 0) {
+    if (e.child_groups.count() > 0) {
         e.report(.has_children, null, null, "element has child elements, so it has no text");
         return error.HasChildren;
     }
@@ -387,20 +373,4 @@ fn callParser(e: *Elem, parser: anytype, args: anytype, selector: ?[]const u8, s
     } else {
         return value.callParser(parser, args);
     }
-}
-
-/// Finds a group of children by local name.
-fn findGroup(e: *const Elem, local_name: []const u8) ?*Group {
-    for (e.groups) |*g| {
-        if (std.mem.eql(u8, g.local_name, local_name)) return g;
-    }
-    return null;
-}
-
-/// Finds an attribute by local name.
-fn findAttr(e: *const Elem, local_name: []const u8) ?*Attr {
-    for (e.attrs) |*a| {
-        if (std.mem.eql(u8, a.local_name, local_name)) return a;
-    }
-    return null;
 }

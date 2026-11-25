@@ -44,7 +44,6 @@ const RawAttr = struct {
 };
 
 const GroupBuilder = struct {
-    local_name: []const u8,
     prefix: []const u8,
     elems: std.ArrayList(*Elem) = .empty,
 };
@@ -93,27 +92,20 @@ const TextBuilder = struct {
 const Frame = struct {
     elem: *Elem,
     qname: []const u8,
-    groups: std.ArrayList(GroupBuilder) = .empty,
-    /// Local name -> index in `groups`. Built only when there are many groups.
-    group_index: std.StringHashMapUnmanaged(u32) = .empty,
+    /// Child elements grouped by local name.
+    groups: std.StringArrayHashMapUnmanaged(GroupBuilder) = .empty,
     text: TextBuilder = .{},
     /// Non-whitespace text or CDATA was found.
     significant: bool = false,
 
     fn deinit(f: *Frame, gpa: Allocator) void {
-        for (f.groups.items) |*g| g.elems.deinit(gpa);
+        for (f.groups.values()) |*g| g.elems.deinit(gpa);
         f.groups.deinit(gpa);
-        f.group_index.deinit(gpa);
         f.text.deinit(gpa);
     }
 };
 
 const DecodeMode = enum { text, attr, cdata };
-
-/// From this many attributes of one element (or groups of children of one element) on,
-/// names are looked up in a hash map instead of linearly. Linear search is faster for
-/// typical documents; the hash map keeps adversarial input from being quadratic.
-const hash_threshold = 512;
 
 const Parser = struct {
     ctx: *Document.Context,
@@ -127,7 +119,7 @@ const Parser = struct {
     stack: std.ArrayList(Frame) = .empty,
     attrs: std.ArrayList(RawAttr) = .empty,
     scratch: std.ArrayList(u8) = .empty,
-    /// Names already seen, for elements with many attributes.
+    /// Qualified names of attributes already seen in the current start tag.
     name_set: std.StringHashMapUnmanaged(void) = .empty,
     /// All elements in document order.
     all: std.ArrayList(*Elem) = .empty,
@@ -445,7 +437,7 @@ const Parser = struct {
             .parent_elem = parent,
             .same_name_index = same_name_index,
             .attrs = attrs,
-            .groups = &.{},
+            .child_groups = .empty,
             .text_content = "",
             .text_significant = false,
         };
@@ -457,79 +449,51 @@ const Parser = struct {
     }
 
     fn findOrAddGroup(p: *Parser, f: *Frame, q: QName, offset: usize) Error!*GroupBuilder {
-        const existing: ?*GroupBuilder = if (f.groups.items.len < hash_threshold) blk: {
-            for (f.groups.items) |*g| {
-                if (std.mem.eql(u8, g.local_name, q.local_name)) break :blk g;
-            }
-            break :blk null;
-        } else blk: {
-            if (f.group_index.count() == 0) {
-                // Switching to the hash map: index the existing groups.
-                // Happens once, when there are exactly `hash_threshold` groups.
-                try f.group_index.ensureTotalCapacity(p.gpa, @intCast(f.groups.items.len));
-                for (f.groups.items, 0..) |g, i| f.group_index.putAssumeCapacityNoClobber(g.local_name, @intCast(i));
-            }
-            const i = f.group_index.get(q.local_name) orelse break :blk null;
-            break :blk &f.groups.items[i];
-        };
-        if (existing) |g| {
-            if (!std.mem.eql(u8, g.prefix, q.prefix)) {
-                return p.fail(offset, "child elements with the same local name have different prefixes");
-            }
-            return g;
+        const gop = try f.groups.getOrPut(p.gpa, q.local_name);
+        if (!gop.found_existing) {
+            gop.value_ptr.* = .{ .prefix = q.prefix };
+        } else if (!std.mem.eql(u8, gop.value_ptr.prefix, q.prefix)) {
+            return p.fail(offset, "child elements with the same local name have different prefixes");
         }
-        const index = std.math.cast(u32, f.groups.items.len) orelse
-            return p.fail(offset, "too many child elements with different names");
-        try f.groups.ensureUnusedCapacity(p.gpa, 1);
-        if (f.group_index.count() > 0) try f.group_index.put(p.gpa, q.local_name, index);
-        f.groups.appendAssumeCapacity(.{ .local_name = q.local_name, .prefix = q.prefix });
-        return &f.groups.items[index];
+        return gop.value_ptr;
     }
 
     /// Checks the attributes in `p.attrs` and copies them (without `xmlns` ones) to the arena.
-    fn buildAttrs(p: *Parser) Error![]Elem.Attr {
+    fn buildAttrs(p: *Parser) Error!std.StringArrayHashMapUnmanaged([]const u8) {
         const raws = p.attrs.items;
-        if (raws.len == 0) return &.{};
+        if (raws.len == 0) return .empty;
 
-        const use_hash = raws.len >= hash_threshold;
-        if (use_hash) {
-            p.name_set.clearRetainingCapacity();
-            const n = std.math.cast(u32, raws.len) orelse return p.fail(raws[0].name_offset, "too many attributes");
-            try p.name_set.ensureTotalCapacity(p.gpa, n);
-        }
+        p.name_set.clearRetainingCapacity();
+        const n = std.math.cast(u32, raws.len) orelse return p.fail(raws[0].name_offset, "too many attributes");
+        try p.name_set.ensureTotalCapacity(p.gpa, n);
 
         var count: usize = 0;
-        for (raws, 0..) |*a, i| {
-            const duplicate = if (use_hash)
-                p.name_set.getOrPutAssumeCapacity(a.qname).found_existing
-            else for (raws[0..i]) |b| {
-                if (std.mem.eql(u8, a.qname, b.qname)) break true;
-            } else false;
-            if (duplicate) return p.fail(a.name_offset, "duplicate attribute");
+        for (raws) |*a| {
+            if (p.name_set.getOrPutAssumeCapacity(a.qname).found_existing) {
+                return p.fail(a.name_offset, "duplicate attribute");
+            }
             const q = try p.splitQName(a.qname, a.name_offset);
             a.local_name = q.local_name;
             a.is_ns = std.mem.eql(u8, a.qname, "xmlns") or std.mem.eql(u8, q.prefix, "xmlns");
             if (!a.is_ns) count += 1;
         }
 
-        if (use_hash) p.name_set.clearRetainingCapacity();
-        for (raws, 0..) |a, i| {
+        var result: std.StringArrayHashMapUnmanaged([]const u8) = .empty;
+        try result.ensureTotalCapacity(p.arena, count);
+        for (raws) |a| {
             if (a.is_ns) continue;
-            const duplicate = if (use_hash)
-                p.name_set.getOrPutAssumeCapacity(a.local_name).found_existing
-            else for (raws[0..i]) |b| {
-                if (!b.is_ns and std.mem.eql(u8, a.local_name, b.local_name)) break true;
-            } else false;
-            if (duplicate) return p.fail(a.name_offset, "multiple attributes with the same local name");
+            const gop = result.getOrPutAssumeCapacity(a.local_name);
+            if (gop.found_existing) return p.fail(a.name_offset, "multiple attributes with the same local name");
+            gop.value_ptr.* = "";
         }
 
-        const result = try p.arena.alloc(Elem.Attr, count);
+        const values = result.values();
         var j: usize = 0;
         for (raws) |a| {
             // Namespace declarations are decoded too, so that they are validated.
             const value = try p.decodeAttrValue(a.raw_value, a.value_offset);
             if (a.is_ns) continue;
-            result[j] = .{ .local_name = a.local_name, .value = value };
+            values[j] = value;
             j += 1;
         }
         return result;
@@ -558,15 +522,11 @@ const Parser = struct {
 
     fn finishFrame(p: *Parser, f: *Frame) Error!void {
         const elem = f.elem;
-        if (f.groups.items.len > 0) {
-            const groups = try p.arena.alloc(Elem.Group, f.groups.items.len);
-            for (groups, f.groups.items) |*g, b| {
-                g.* = .{
-                    .local_name = b.local_name,
-                    .elems = try p.arena.dupe(*Elem, b.elems.items),
-                };
+        if (f.groups.count() > 0) {
+            try elem.child_groups.ensureTotalCapacity(p.arena, f.groups.count());
+            for (f.groups.keys(), f.groups.values()) |name, g| {
+                elem.child_groups.putAssumeCapacityNoClobber(name, try p.arena.dupe(*Elem, g.elems.items));
             }
-            elem.groups = groups;
         } else {
             elem.text_content = try f.text.finish(p.arena);
             elem.text_significant = f.significant;
@@ -591,7 +551,7 @@ const Parser = struct {
         const f = p.top();
         // Only literal whitespace is ignorable; a character reference (`&#32;`) is text.
         const whitespace = chars.isAllSpace(raw);
-        if (f.groups.items.len > 0) {
+        if (f.groups.count() > 0) {
             // Whitespace between child elements is ignored.
             if (!whitespace) {
                 return p.fail(start, "mixed content: element contains both text and child elements");
@@ -615,7 +575,7 @@ const Parser = struct {
         p.pos = end + 3;
 
         const f = p.top();
-        if (f.groups.items.len > 0) {
+        if (f.groups.count() > 0) {
             return p.fail(start, "mixed content: element contains both text and child elements");
         }
         f.significant = true;

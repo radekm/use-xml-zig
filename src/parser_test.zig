@@ -10,17 +10,11 @@ const recording = @import("recording.zig");
 // These helpers read the fields directly, so that the tests don't mark anything as used.
 
 fn group(e: *const Elem, name: []const u8) []const *Elem {
-    for (e.groups) |g| {
-        if (std.mem.eql(u8, g.local_name, name)) return g.elems;
-    }
-    return &.{};
+    return e.child_groups.get(name) orelse &.{};
 }
 
 fn attrValue(e: *const Elem, name: []const u8) ?[]const u8 {
-    for (e.attrs) |a| {
-        if (std.mem.eql(u8, a.local_name, name)) return a.value;
-    }
-    return null;
+    return e.attrs.get(name);
 }
 
 fn isInside(outer: []const u8, inner: []const u8) bool {
@@ -78,9 +72,9 @@ test "child elements are grouped by name in document order" {
     defer doc.deinit();
     const root = doc.root();
 
-    try t.expectEqual(2, root.groups.len);
-    try t.expectEqualStrings("dog", root.groups[0].local_name);
-    try t.expectEqualStrings("pig", root.groups[1].local_name);
+    try t.expectEqual(2, root.child_groups.count());
+    try t.expectEqualStrings("dog", root.child_groups.keys()[0]);
+    try t.expectEqualStrings("pig", root.child_groups.keys()[1]);
     try t.expectEqualStrings("", root.text_content);
 
     const dogs = group(root, "dog");
@@ -134,7 +128,7 @@ test "namespace declarations are skipped and prefixes ignored" {
     var doc = try Document.parse(t.allocator, input, .{});
     defer doc.deinit();
     const root = doc.root();
-    try t.expectEqual(1, root.attrs.len);
+    try t.expectEqual(1, root.attrs.count());
     try t.expectEqualStrings("1", attrValue(root, "id").?);
 
     const table = group(root, "table")[0];
@@ -216,9 +210,9 @@ test "whitespace" {
     }
 }
 
-test "many attributes and many groups of children (hash map lookup)" {
+test "many attributes and many groups of children" {
     const gpa = t.allocator;
-    const n = 2000; // well above the threshold of the hash map
+    const n = 2000;
     var buf: std.ArrayList(u8) = .empty;
     defer buf.deinit(gpa);
 
@@ -235,18 +229,18 @@ test "many attributes and many groups of children (hash map lookup)" {
         var doc = try Document.parse(gpa, buf.items, .{});
         defer doc.deinit();
         const r = doc.root();
-        try t.expectEqual(n, r.attrs.len);
+        try t.expectEqual(n, r.attrs.count());
         try t.expectEqualStrings("1234", attrValue(r, "a1234").?);
-        try t.expectEqual(n, r.groups.len);
-        for (r.groups, 0..) |g, i| {
+        try t.expectEqual(n, r.child_groups.count());
+        for (r.child_groups.keys(), r.child_groups.values(), 0..) |name, elems, i| {
             var name_buf: [16]u8 = undefined;
-            try t.expectEqualStrings(try std.fmt.bufPrint(&name_buf, "c{d}", .{i}), g.local_name);
-            try t.expectEqual(2, g.elems.len);
-            try t.expectEqual(1, g.elems[1].same_name_index);
+            try t.expectEqualStrings(try std.fmt.bufPrint(&name_buf, "c{d}", .{i}), name);
+            try t.expectEqual(2, elems.len);
+            try t.expectEqual(1, elems[1].same_name_index);
         }
     }
 
-    // Errors are found at the same place as with linear lookup.
+    // Collisions are found in large elements too.
     // `marker` is where the error is reported.
     const cases = [_]struct { tail: []const u8, marker: []const u8, message: []const u8 }{
         .{ .tail = " a7=\"x\"/>", .marker = "a7=\"x\"", .message = "duplicate attribute" },
@@ -303,7 +297,7 @@ test "deep nesting does not use the call stack" {
     defer doc.deinit();
     var e = doc.root();
     var n: usize = 1;
-    while (e.groups.len > 0) : (n += 1) e = e.groups[0].elems[0];
+    while (e.child_groups.count() > 0) : (n += 1) e = e.child_groups.values()[0][0];
     try t.expectEqual(depth, n);
 
     try t.expectError(error.InvalidXml, Document.parse(t.allocator, buf.items, .{ .max_depth = depth - 1 }));

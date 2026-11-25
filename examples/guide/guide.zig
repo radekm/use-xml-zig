@@ -168,7 +168,7 @@ test "unused data" {
     , w.buffered());
 
     // Data we intentionally don't care about:
-    (try doc.root().child("logging")).ignoreAll();
+    try (try doc.root().child("logging")).ignoreAll();
     _ = try doc.root().attr([]const u8, "version");
     _ = try server.attr(bool, "tls");
     try doc.expectAllUsed();

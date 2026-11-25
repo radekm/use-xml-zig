@@ -66,6 +66,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 | 2026-11-24 | Writing into `Diagnostics` (`reset`, `record`, `recordInvalidXml`, `lineColumn`) lives in the internal `recording.zig`, which `root.zig` doesn't export. The public API of `Diagnostics` is only `init`, `message`, `format` and the fields; `reset` is not public. |
 | 2026-11-24 | The `...With` variants stay, although strings from `attr` / `text` are already decoded and could be parsed afterwards: they exist so that a parser's error is recorded in `Diagnostics` with the path, the name and the input. |
 | 2026-11-23 | Only the `master` branch is used. |
+| 2026-11-25 | Names are looked up in hash maps (`std.StringArrayHashMapUnmanaged`): an element has `attrs` and `child_groups`; used names are kept in the sets `attrs_used` and `child_groups_used` (also for names that don't exist; the separate list of missing names is removed). So lookups and `ignoreAll` allocate in the document's arena; `ignoreAll` returns `IgnoreError!void`. The unused `prefix` was removed from elements. |
 
 ## Milestones
 

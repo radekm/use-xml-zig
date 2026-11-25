@@ -137,9 +137,9 @@ test "whitespace and namespace declarations are never reported" {
 test "ignoreAll hides the element and everything below it" {
     var doc = try Document.parse(t.allocator, "<r><a x=\"1\"><b>t</b>  </a><c>x</c></r>", .{});
     defer doc.deinit();
-    (try doc.root().child("a")).ignoreAll();
+    try (try doc.root().child("a")).ignoreAll();
     try expectReport(&doc, "/r: child elements: c\n");
-    doc.root().ignoreAll();
+    try doc.root().ignoreAll();
     try expectReport(&doc, "");
 }
 

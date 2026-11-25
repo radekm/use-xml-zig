@@ -181,7 +181,8 @@ Calling `text*` on an element that has child elements fails with `error.HasChild
 ```zig
 /// Marks all attributes, child names and the text of `e` as used.
 /// Child elements are not visited, so their content is not reported either.
-pub fn ignoreAll(e: *Elem) void;
+/// Fails with `error.OutOfMemory` (and changes nothing) if the document's internal memory runs out.
+pub fn ignoreAll(e: *Elem) IgnoreError!void;
 ```
 
 #### Error set
@@ -204,6 +205,7 @@ pub const ChildrenError = error{ AlreadyUsed, OutOfMemory };                    
 pub const AttrLookupError = error{ Missing, AlreadyUsed, OutOfMemory };         // finding a required attribute
 pub const AttrOptLookupError = error{ AlreadyUsed, OutOfMemory };               // finding an optional attribute
 pub const TextLookupError = error{ HasChildren, AlreadyUsed };                  // finding the text
+pub const IgnoreError = error{OutOfMemory};                                      // ignoreAll
 ```
 
 `attr*`, `attrOpt*` and `text*` without `With` return the errors of the lookup plus `V`, the errors
@@ -218,7 +220,7 @@ of parsing a value of type `T`. `V` contains only the errors that can happen for
 A hook adds `InvalidValue` if it can fail with an error other than `OutOfMemory`, and `OutOfMemory`
 if it can fail with it. So `text([]const u8)` fails only with `HasChildren` or `AlreadyUsed`, and
 `text(u32)` never fails with `OutOfMemory`. `attr*` can always fail with `OutOfMemory`, because
-the document remembers requested names that don't exist.
+the document remembers requested names.
 
 #### Custom parsers
 
@@ -278,7 +280,7 @@ to be known).
 ### Threads
 
 A document is **not thread-safe**, not even for reading: every extraction function changes it
-(it marks data as used, remembers missing names in the document's arena and records
+(it marks data as used, remembers requested names in the document's arena and records
 `Options.diagnostics`). Use a document and its elements from one thread at a time. Different
 documents can be used from different threads, each with its own `Diagnostics`.
 
@@ -437,7 +439,7 @@ var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
 - **Every error returned by the library is recorded**: XML syntax errors of `parse` (with `line`
   and `column`), errors of the extraction functions and of `expectAllUsed`, and
   `error.OutOfMemory`. Two kinds tell where the memory ran out: `document_out_of_memory` (the
-  document's internal memory: in `parse`, and when remembering requested names that don't exist)
+  document's internal memory: in `parse`, when remembering requested names, and in `ignoreAll`)
   and `value_out_of_memory` (producing the value: the allocator of an `...Alloc` function, or a
   custom parser or `parseXmlAlloc` hook that returned `error.OutOfMemory`).
 - It holds only the **last** error: every error overwrites it, and nothing else changes it.
@@ -464,11 +466,14 @@ The example `examples/m7/m7.zig` shows a function that takes `?*Diagnostics` fro
 
 - `Document.parse`: on `error.OutOfMemory` everything allocated so far is freed and no document is
   returned. The diagnostics get the kind `document_out_of_memory`.
-- Lookups by name (`attr*`, `child*`, `children`) can return `error.OutOfMemory` **only when the
-  name doesn't exist in the element**: the name is then copied into the document's internal arena
-  so that a second request can be detected. Existing names need no allocation.
-- `text*` without an allocator, `ignoreAll`, `unused`, `expectAllUsed` and `Diagnostics.format`
-  never allocate.
+- Lookups by name (`attr*`, `child*`, `children`) can return `error.OutOfMemory`: every requested
+  name is added to a set of used names (a hash map in the document's internal arena) so that
+  a second request can be detected. A name that doesn't exist in the element is also copied into
+  the arena. When this fails, the name is not marked as used.
+- `ignoreAll` adds all names of the element to these sets, so it can return `error.OutOfMemory`
+  too. Then it changes nothing.
+- `text*` without an allocator, `unused`, `expectAllUsed` and `Diagnostics.format` never
+  allocate.
 - `...Alloc` functions return `error.OutOfMemory` when the caller's allocator fails. Nothing is
   leaked: memory allocated for the failed value is freed before returning. Values returned by
   earlier calls belong to the caller, who frees them as usual (`errdefer`).

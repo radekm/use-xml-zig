@@ -66,6 +66,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 | 2026-11-24 | Zápis do `Diagnostics` (`reset`, `record`, `recordInvalidXml`, `lineColumn`) je v interním `recording.zig`, který `root.zig` neexportuje. Veřejné API `Diagnostics` tvoří jen `init`, `message`, `format` a pole; `reset` není veřejný. |
 | 2026-11-24 | Varianty `...With` zůstávají, i když řetězce z `attr` / `text` jsou už dekódované a šly by naparsovat dodatečně: jsou tu proto, aby se chyba parseru zaznamenala do `Diagnostics` i s cestou, jménem a vstupem. |
 | 2026-11-23 | Používá se pouze větev `master`. |
+| 2026-11-25 | Jména se vyhledávají v hashovacích tabulkách (`std.StringArrayHashMapUnmanaged`): element má `attrs` a `child_groups`; použitá jména se drží v množinách `attrs_used` a `child_groups_used` (i pro neexistující jména; samostatný seznam chybějících jmen je odstraněný). Vyhledávání a `ignoreAll` proto alokují v areně dokumentu; `ignoreAll` vrací `IgnoreError!void`. Z elementů byl odstraněn nepoužívaný `prefix`. |
 
 ## Milníky
 

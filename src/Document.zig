@@ -147,12 +147,12 @@ pub const Unused = struct {
 
     /// Iterates over unused attributes (`xmlns` / `xmlns:*` are never reported).
     pub fn attrs(u: Unused) UnusedAttrIterator {
-        return .{ .attrs = u.elem.attrs };
+        return .{ .elem = u.elem };
     }
 
     /// Iterates over names of child groups that were never requested. Their content is not examined.
     pub fn childNames(u: Unused) UnusedChildNameIterator {
-        return .{ .groups = u.elem.groups };
+        return .{ .elem = u.elem };
     }
 
     fn isEmpty(u: Unused) bool {
@@ -190,14 +190,17 @@ pub const UnusedAttr = struct {
 
 /// Iterates over unused attributes of one element.
 pub const UnusedAttrIterator = struct {
-    attrs: []const Elem.Attr,
+    elem: *const Elem,
     index: usize = 0,
 
     pub fn next(it: *UnusedAttrIterator) ?UnusedAttr {
-        while (it.index < it.attrs.len) {
-            const a = it.attrs[it.index];
+        const names = it.elem.attrs.keys();
+        while (it.index < names.len) {
+            const i = it.index;
             it.index += 1;
-            if (!a.used) return .{ .name = a.local_name, .value = a.value };
+            if (!it.elem.attrs_used.contains(names[i])) {
+                return .{ .name = names[i], .value = it.elem.attrs.values()[i] };
+            }
         }
         return null;
     }
@@ -205,14 +208,15 @@ pub const UnusedAttrIterator = struct {
 
 /// Iterates over names of child groups of one element that were never requested.
 pub const UnusedChildNameIterator = struct {
-    groups: []const Elem.Group,
+    elem: *const Elem,
     index: usize = 0,
 
     pub fn next(it: *UnusedChildNameIterator) ?[]const u8 {
-        while (it.index < it.groups.len) {
-            const g = it.groups[it.index];
+        const names = it.elem.child_groups.keys();
+        while (it.index < names.len) {
+            const name = names[it.index];
             it.index += 1;
-            if (!g.used) return g.local_name;
+            if (!it.elem.child_groups_used.contains(name)) return name;
         }
         return null;
     }
