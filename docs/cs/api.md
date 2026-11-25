@@ -179,10 +179,10 @@ Volání `text*` na elementu, který má podelementy, selže s `error.HasChildre
 #### Ignorování
 
 ```zig
-/// Marks all attributes, child names and the text of `e` as used.
-/// Child elements are not visited, so their content is not reported either.
-/// Fails with `error.OutOfMemory` (and changes nothing) if the document's internal memory runs out.
-pub fn ignoreAll(e: *Elem) IgnoreError!void;
+/// Marks everything in `e` as used: attributes, child elements and the text, including
+/// the content of all descendants. Afterwards every request on `e` (even for a name that
+/// doesn't exist) fails with `error.AlreadyUsed`.
+pub fn ignoreAll(e: *Elem) void;
 ```
 
 #### Množina chyb
@@ -205,7 +205,6 @@ pub const ChildrenError = error{ AlreadyUsed, OutOfMemory };                    
 pub const AttrLookupError = error{ Missing, AlreadyUsed, OutOfMemory };         // finding a required attribute
 pub const AttrOptLookupError = error{ AlreadyUsed, OutOfMemory };               // finding an optional attribute
 pub const TextLookupError = error{ HasChildren, AlreadyUsed };                  // finding the text
-pub const IgnoreError = error{OutOfMemory};                                      // ignoreAll
 ```
 
 `attr*`, `attrOpt*` a `text*` bez `With` vrací chyby vyhledání a navíc `V`, chyby parsování
@@ -264,7 +263,8 @@ v `Options.diagnostics`. Hook nesmí být generický (jeho množina chyb musí b
    neexistují (`attrOpt("x")` dvakrát je chyba): taková jména si dokument pamatuje. Odhalí se tak
    kód, který zpracovává stejnou věc dvakrát, a odpovídá to UseData.Xml.
 2. `child`, `childOpt` a `children` označí za použitou **celou skupinu** podelementů s tím jménem.
-   Každý vrácený element je pak *navštívený*: jeho vlastní obsah kontroluje hlášení nepoužitých dat.
+   Obsah elementů ve skupině pak kontroluje hlášení nepoužitých dat (i když `child` / `childOpt`
+   selhaly s `error.TooMany`).
 3. Ptát se na jméno, které neexistuje, je v pořádku (`attrOpt`, `childOpt`, `children` vrátí
    `null` / prázdný slice). Selžou jen `attr` a `child`.
 4. Na pořadí dotazů nezáleží.
@@ -285,8 +285,12 @@ z různých vláken, každý s vlastní `Diagnostics`.
 
 ## Nepoužitá data
 
-Po extrakci projde `doc.unused()` všechny *navštívené* elementy (kořen a všechny elementy vrácené
-z `child*` / `children`) v pořadí dokumentu. Pro každý element, ve kterém zůstalo něco nepoužitého,
+Po extrakci projde `doc.unused()` všechny *kontrolované* elementy v pořadí dokumentu. Element se
+kontroluje, pokud ani on, ani žádný jeho předek nebyl ignorován (`ignoreAll`) a jméno každého
+elementu na cestě od kořene si někdo vyžádal od jeho rodiče (`child*` / `children`). Podelementy,
+na jejichž jméno se nikdo neptal, nahlásí jen jejich rodič jako jméno; do jejich obsahu se
+nenahlíží. Kontrola elementu prochází jeho předky, takže průchod trvá úměrně počtu elementů krát
+hloubce (omezené `Options.max_depth`). Pro každý element, ve kterém zůstalo něco nepoužitého,
 vrátí jednu položku:
 
 ```zig
@@ -437,8 +441,8 @@ var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
 
 - **Zaznamená se každá chyba, kterou knihovna vrátí**: syntaktické chyby XML z `parse` (s `line`
   a `column`), chyby extrakčních funkcí a `expectAllUsed` i `error.OutOfMemory`. Dva druhy říkají,
-  kde paměť došla: `document_out_of_memory` (interní paměť dokumentu: v `parse`, při
-  zapamatování vyžádaných jmen a v `ignoreAll`) a `value_out_of_memory` (vytváření hodnoty:
+  kde paměť došla: `document_out_of_memory` (interní paměť dokumentu: v `parse` a při
+  zapamatování vyžádaných jmen) a `value_out_of_memory` (vytváření hodnoty:
   alokátor funkce `...Alloc`, nebo vlastní parser či hook `parseXmlAlloc`, který vrátil
   `error.OutOfMemory`).
 - Drží jen **poslední** chybu: každá chyba ji přepíše a nic jiného ji nemění. `parse` ji na
@@ -466,9 +470,8 @@ Příklad `examples/m7/m7.zig` ukazuje funkci, která dostane `?*Diagnostics` od
   vyžádané jméno se přidá do množiny použitých jmen (hashovací tabulky v interní areně dokumentu),
   aby šlo odhalit druhé vyžádání. Jméno, které v elementu neexistuje, se navíc zkopíruje do areny.
   Když se to nepovede, jméno se jako použité neoznačí.
-- `ignoreAll` přidá do těchto množin všechna jména elementu, takže také může vrátit
-  `error.OutOfMemory`. Pak nic nezmění.
-- `text*` bez alokátoru, `unused`, `expectAllUsed` a `Diagnostics.format` nikdy nealokují.
+- `text*` bez alokátoru, `ignoreAll`, `unused`, `expectAllUsed` a `Diagnostics.format` nikdy
+  nealokují.
 - Funkce `...Alloc` vrátí `error.OutOfMemory`, když selže alokátor volajícího. Nic neunikne: paměť
   alokovaná pro neúspěšnou hodnotu se před návratem uvolní. Hodnoty vrácené dřívějšími voláními
   patří volajícímu, který je uvolní jako obvykle (`errdefer`).

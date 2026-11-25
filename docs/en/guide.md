@@ -263,8 +263,8 @@ What is reported:
 
 To mark data you intentionally don't need, request it and ignore the result
 (`_ = try e.attrOpt([]const u8, "comment")`) — this also validates its format — or call
-`e.ignoreAll()`, which marks all attributes, children and text of `e` as used without looking
-inside the children.
+`e.ignoreAll()`, which marks everything in `e` as used, including the content of all
+descendants. After that, any request on `e` fails with `error.AlreadyUsed`.
 
 `doc.expectAllUsed()` is a shortcut: it fails with `error.UnusedData` and describes the first
 unused item in the diagnostics.

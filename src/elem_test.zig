@@ -198,21 +198,16 @@ test "text keeps whitespace and empty elements have empty text" {
 test "ignoreAll" {
     var f = try Fixture.init("<a x=\"1\"><b/></a>");
     defer f.deinit();
-    try f.root().ignoreAll();
+    f.root().ignoreAll();
     try t.expectError(error.AlreadyUsed, f.root().attr([]const u8, "x"));
+    try f.expectDiag(.already_used, "/a: \"x\": attribute was already used");
     try t.expectError(error.AlreadyUsed, f.root().children("b"));
-    try t.expectEqual(null, try f.root().attrOpt([]const u8, "y"));
-}
-
-test "visited elements" {
-    var f = try Fixture.init("<a><b/><b/><c/><d/></a>");
-    defer f.deinit();
-    const a = f.root();
-    try t.expect(a.visited);
-    const bs = try a.children("b");
-    const c = try a.child("c");
-    try t.expect(bs[0].visited and bs[1].visited and c.visited);
-    try t.expect(!a.child_groups.values()[2][0].visited); // d
+    // Names that don't exist and the text are used too.
+    try t.expectError(error.AlreadyUsed, f.root().attrOpt([]const u8, "y"));
+    try f.expectDiag(.already_used, "/a: \"y\": attribute was already used");
+    try t.expectError(error.AlreadyUsed, f.root().childOpt("c"));
+    try t.expectError(error.AlreadyUsed, f.root().text([]const u8));
+    f.root().ignoreAll(); // again
 }
 
 // ------------------------------------------------------------------ custom parsers and allocation
@@ -632,29 +627,6 @@ test "out of memory is recorded in diagnostics" {
         try t.expectEqual(Diagnostics.Kind.document_out_of_memory, diag.kind);
         failing.fail_index = std.math.maxInt(usize); // stop failing
         try t.expect((try doc.root().attr(u32, failed.?)) < n);
-    }
-    // `ignoreAll` fails and changes nothing.
-    {
-        const gpa = t.allocator;
-        var input: std.ArrayList(u8) = .empty;
-        defer input.deinit(gpa);
-        const n = 20_000;
-        try input.appendSlice(gpa, "<a");
-        for (0..n) |i| try input.print(gpa, " x{d}=\"{d}\"", .{ i, i });
-        try input.appendSlice(gpa, ">text</a>");
-
-        var failing: std.testing.FailingAllocator = .init(gpa, .{});
-        var diag_buf: [256]u8 = undefined;
-        var diag: Diagnostics = .init(&diag_buf);
-        var doc = try Document.parse(failing.allocator(), input.items, .{ .diagnostics = &diag });
-        defer doc.deinit();
-        failing.fail_index = failing.alloc_index; // fail from now on
-        try t.expectError(error.OutOfMemory, doc.root().ignoreAll());
-        try t.expectEqual(Diagnostics.Kind.document_out_of_memory, diag.kind);
-        try t.expectEqualStrings("/a: document out of memory", diag.message());
-        failing.fail_index = std.math.maxInt(usize); // stop failing
-        try t.expectEqual(1234, try doc.root().attr(u32, "x1234"));
-        try t.expectEqualStrings("text", try doc.root().text([]const u8));
     }
 }
 

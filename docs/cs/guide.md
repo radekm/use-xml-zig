@@ -262,8 +262,8 @@ Co se hlásí:
 
 Data, která záměrně nepotřebujete, buď vyžádejte a výsledek zahoďte
 (`_ = try e.attrOpt([]const u8, "comment")`) — tím se zároveň ověří jejich formát — nebo zavolejte
-`e.ignoreAll()`, které označí všechny atributy, podelementy i text `e` jako použité, aniž by
-nahlíželo do podelementů.
+`e.ignoreAll()`, které označí jako použité vše v `e` včetně obsahu všech potomků. Potom každý
+dotaz na `e` selže s `error.AlreadyUsed`.
 
 `doc.expectAllUsed()` je zkratka: selže s `error.UnusedData` a první nepoužitou položku popíše
 v diagnostice.

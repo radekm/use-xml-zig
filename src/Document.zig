@@ -70,7 +70,6 @@ fn parseInner(gpa: Allocator, input: []const u8, options: Options) ParseError!Do
     errdefer ctx.arena.deinit();
 
     ctx.root = try parser.parse(ctx, options.max_depth);
-    ctx.root.visited = true;
     return .{ .ctx = ctx };
 }
 
@@ -90,8 +89,11 @@ pub fn root(doc: *Document) *Elem {
 
 // ------------------------------------------------------------------ unused data
 
-/// Iterates over visited elements (the root and all elements returned by `child*` / `children`)
-/// that have unused content, in document order.
+/// Iterates over checked elements that have unused content, in document order.
+/// An element is checked if neither it nor any of its ancestors is ignored (`ignoreAll`)
+/// and the name of every element on the path from the root was requested from its parent
+/// (`child*` / `children`). So the root and all elements returned by the extraction functions
+/// are checked; children whose name was never requested are reported only by their parent.
 pub fn unused(doc: *const Document) UnusedIterator {
     return .{ .elems = doc.ctx.elems };
 }
@@ -123,7 +125,7 @@ pub const UnusedIterator = struct {
         while (it.index < it.elems.len) {
             const e = it.elems[it.index];
             it.index += 1;
-            if (!e.visited) continue;
+            if (!isChecked(e)) continue;
             const u = Unused.of(e);
             if (u.isEmpty()) continue;
             return u;
@@ -132,7 +134,18 @@ pub const UnusedIterator = struct {
     }
 };
 
-/// Unused content of one visited element.
+/// See `unused`. Walks the ancestors, so it takes time linear in the depth of `e`.
+fn isChecked(e: *const Elem) bool {
+    var it = e;
+    while (true) {
+        if (it.all_used) return false;
+        const p = it.parent_elem orelse return true;
+        if (!p.child_groups_used.contains(it.local_name)) return false;
+        it = p;
+    }
+}
+
+/// Unused content of one checked element.
 pub const Unused = struct {
     elem: *const Elem,
     /// Unused text, or null. Whitespace-only text without CDATA is never reported.

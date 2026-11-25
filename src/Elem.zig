@@ -30,11 +30,11 @@ child_groups_used: std.StringArrayHashMapUnmanaged(void) = .empty,
 text_content: []const u8,
 /// The text contains a non-whitespace character or a CDATA section.
 text_significant: bool,
-/// The text was requested (or `ignoreAll` was called).
+/// The text was requested.
 text_used: bool = false,
-/// The element was returned by `child*` / `children` (or is the root).
-/// Only visited elements are examined when reporting unused data.
-visited: bool = false,
+/// `ignoreAll` was called: everything in the element, including its descendants, is used
+/// and any further request fails with `error.AlreadyUsed`.
+all_used: bool = false,
 
 /// All errors of the extraction functions. Details go to `Document.Options.diagnostics`.
 /// Each function returns only the subset that can actually happen (see below).
@@ -66,9 +66,6 @@ pub const AttrOptLookupError = error{ AlreadyUsed, OutOfMemory };
 /// Errors of looking up the text (`text*`), before parsing the value.
 pub const TextLookupError = error{ HasChildren, AlreadyUsed };
 // `attr(T, …)`, `text(T)`, … add the errors of parsing a value of type `T`, see `value.ValueError`.
-
-/// Errors of `ignoreAll`.
-pub const IgnoreError = error{OutOfMemory};
 
 /// Local name (without prefix).
 pub fn name(e: *const Elem) []const u8 {
@@ -181,7 +178,6 @@ pub fn child(e: *Elem, child_name: []const u8) ChildError!*Elem {
         e.report(.too_many, g.name, null, "expected exactly one child element, found more than one");
         return error.TooMany;
     }
-    g.elems[0].visited = true;
     return g.elems[0];
 }
 
@@ -193,7 +189,6 @@ pub fn childOpt(e: *Elem, child_name: []const u8) ChildOptError!?*Elem {
         return error.TooMany;
     }
     if (g.elems.len == 0) return null;
-    g.elems[0].visited = true;
     return g.elems[0];
 }
 
@@ -201,7 +196,6 @@ pub fn childOpt(e: *Elem, child_name: []const u8) ChildOptError!?*Elem {
 /// The slice is owned by the document.
 pub fn children(e: *Elem, child_name: []const u8) ChildrenError![]const *Elem {
     const g = try e.useGroup(child_name);
-    for (g.elems) |c| c.visited = true;
     return g.elems;
 }
 
@@ -234,18 +228,11 @@ pub fn textAllocWith(e: *Elem, gpa: Allocator, parser: anytype) WithResult(TextL
 
 // ------------------------------------------------------------------ ignoring
 
-/// Marks all attributes, child names and the text of `e` as used.
-/// Child elements are not visited, so their content is not reported either.
-/// Fails with `error.OutOfMemory` (and changes nothing) if the document's internal memory runs out.
-pub fn ignoreAll(e: *Elem) IgnoreError!void {
-    const arena = e.ctx.arena.allocator();
-    e.attrs_used.ensureUnusedCapacity(arena, e.attrs.count()) catch
-        return e.reportDocumentOutOfMemory(null);
-    e.child_groups_used.ensureUnusedCapacity(arena, e.child_groups.count()) catch
-        return e.reportDocumentOutOfMemory(null);
-    for (e.attrs.keys()) |k| e.attrs_used.putAssumeCapacity(k, {});
-    for (e.child_groups.keys()) |k| e.child_groups_used.putAssumeCapacity(k, {});
-    e.text_used = true;
+/// Marks everything in `e` as used: attributes, child elements and the text, including
+/// the content of all descendants. Afterwards every request on `e` (even for a name that
+/// doesn't exist) fails with `error.AlreadyUsed`.
+pub fn ignoreAll(e: *Elem) void {
+    e.all_used = true;
 }
 
 // ------------------------------------------------------------------ internals
@@ -268,8 +255,8 @@ fn report(e: *Elem, kind: Diagnostics.Kind, selector: ?[]const u8, input: ?[]con
 const document_oom_message = "document out of memory";
 const value_oom_message = "out of memory while producing the value";
 
-/// Records that the document's internal memory ran out (while remembering `wanted_name`).
-fn reportDocumentOutOfMemory(e: *Elem, wanted_name: ?[]const u8) error{OutOfMemory} {
+/// Records that the document's internal memory ran out while remembering `wanted_name`.
+fn reportDocumentOutOfMemory(e: *Elem, wanted_name: []const u8) error{OutOfMemory} {
     e.report(.document_out_of_memory, wanted_name, null, document_oom_message);
     return error.OutOfMemory;
 }
@@ -284,6 +271,10 @@ fn markUsed(
     stored: ?[]const u8,
     message: []const u8,
 ) error{ AlreadyUsed, OutOfMemory }![]const u8 {
+    if (e.all_used) {
+        e.report(.already_used, wanted, null, message);
+        return error.AlreadyUsed;
+    }
     const arena = e.ctx.arena.allocator();
     const gop = used.getOrPut(arena, wanted) catch return e.reportDocumentOutOfMemory(wanted);
     if (gop.found_existing) {
@@ -334,7 +325,7 @@ fn useGroup(e: *Elem, child_name: []const u8) ChildrenError!GroupUse {
 }
 
 fn useText(e: *Elem) TextLookupError!void {
-    if (e.text_used) {
+    if (e.text_used or e.all_used) {
         e.report(.already_used, null, null, "text was already used");
         return error.AlreadyUsed;
     }

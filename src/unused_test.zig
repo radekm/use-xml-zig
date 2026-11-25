@@ -79,7 +79,7 @@ test "unused text" {
     var doc = try Document.parse(t.allocator, company_input, .{});
     defer doc.deinit();
     const address = try doc.root().child("address");
-    _ = try address.child("city"); // visited, but its text is not used
+    _ = try address.child("city"); // checked, but its text is not used
     _ = try (try address.child("street")).text([]const u8);
     try expectReport(&doc, "/company/address[0]/city[0]: text: \"London\"\n");
 }
@@ -137,10 +137,27 @@ test "whitespace and namespace declarations are never reported" {
 test "ignoreAll hides the element and everything below it" {
     var doc = try Document.parse(t.allocator, "<r><a x=\"1\"><b>t</b>  </a><c>x</c></r>", .{});
     defer doc.deinit();
-    try (try doc.root().child("a")).ignoreAll();
+    (try doc.root().child("a")).ignoreAll();
     try expectReport(&doc, "/r: child elements: c\n");
-    try doc.root().ignoreAll();
+    doc.root().ignoreAll();
     try expectReport(&doc, "");
+}
+
+test "ignoreAll hides descendants that were already returned" {
+    var doc = try Document.parse(t.allocator, "<r><a><b x=\"1\">t</b></a></r>", .{});
+    defer doc.deinit();
+    const a = try doc.root().child("a");
+    _ = try a.child("b");
+    try expectReport(&doc, "/r/a[0]/b[0]: attributes: x=\"1\"; text: \"t\"\n");
+    a.ignoreAll();
+    try expectReport(&doc, "");
+}
+
+test "children of a group that failed with TooMany are checked" {
+    var doc = try Document.parse(t.allocator, "<r><a x=\"1\"/><a>2</a></r>", .{});
+    defer doc.deinit();
+    try t.expectError(error.TooMany, doc.root().child("a"));
+    try expectReport(&doc, "/r/a[0]: attributes: x=\"1\"\n/r/a[1]: text: \"2\"\n");
 }
 
 test "requested missing names are not reported" {
@@ -179,11 +196,4 @@ test "expectAllUsed describes the first unused item" {
         var buf: [256]u8 = undefined;
         try t.expectEqualStrings(case[1], try std.fmt.bufPrint(&buf, "{f}", .{diag}));
     }
-}
-
-test "children of an element with a failed child() are not reported" {
-    var doc = try Document.parse(t.allocator, "<r><a>1</a><a>2</a></r>", .{});
-    defer doc.deinit();
-    try t.expectError(error.TooMany, doc.root().child("a"));
-    try expectReport(&doc, "");
 }

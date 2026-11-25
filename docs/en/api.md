@@ -179,10 +179,10 @@ Calling `text*` on an element that has child elements fails with `error.HasChild
 #### Ignoring
 
 ```zig
-/// Marks all attributes, child names and the text of `e` as used.
-/// Child elements are not visited, so their content is not reported either.
-/// Fails with `error.OutOfMemory` (and changes nothing) if the document's internal memory runs out.
-pub fn ignoreAll(e: *Elem) IgnoreError!void;
+/// Marks everything in `e` as used: attributes, child elements and the text, including
+/// the content of all descendants. Afterwards every request on `e` (even for a name that
+/// doesn't exist) fails with `error.AlreadyUsed`.
+pub fn ignoreAll(e: *Elem) void;
 ```
 
 #### Error set
@@ -205,7 +205,6 @@ pub const ChildrenError = error{ AlreadyUsed, OutOfMemory };                    
 pub const AttrLookupError = error{ Missing, AlreadyUsed, OutOfMemory };         // finding a required attribute
 pub const AttrOptLookupError = error{ AlreadyUsed, OutOfMemory };               // finding an optional attribute
 pub const TextLookupError = error{ HasChildren, AlreadyUsed };                  // finding the text
-pub const IgnoreError = error{OutOfMemory};                                      // ignoreAll
 ```
 
 `attr*`, `attrOpt*` and `text*` without `With` return the errors of the lookup plus `V`, the errors
@@ -265,7 +264,8 @@ to be known).
    that don't exist (`attrOpt("x")` twice is an error): such names are remembered in the document.
    This catches code that processes the same thing twice and matches UseData.Xml.
 2. `child`, `childOpt` and `children` mark the **whole group** of children with that name as used.
-   Each returned element is then *visited*: its own content is checked by the unused report.
+   The content of the elements in the group is then checked by the unused report (even when
+   `child` / `childOpt` failed with `error.TooMany`).
 3. Asking for a name that is not present is fine (`attrOpt`, `childOpt`, `children` return
    `null` / an empty slice). Only `attr` and `child` fail.
 4. The order of requests doesn't matter.
@@ -286,8 +286,12 @@ documents can be used from different threads, each with its own `Diagnostics`.
 
 ## Unused data
 
-After extraction, `doc.unused()` walks all *visited* elements (the root and all elements returned
-by `child*` / `children`) in document order. It yields one entry for each element that has
+After extraction, `doc.unused()` walks all *checked* elements in document order. An element is
+checked if neither it nor any of its ancestors was ignored (`ignoreAll`) and the name of every
+element on the path from the root was requested from its parent (`child*` / `children`). Children
+whose name was never requested are reported only as a name by their parent; their content is not
+examined. Checking an element walks its ancestors, so the walk takes time proportional to
+the number of elements times the depth (limited by `Options.max_depth`). It yields one entry for each element that has
 something unused:
 
 ```zig
@@ -439,7 +443,7 @@ var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
 - **Every error returned by the library is recorded**: XML syntax errors of `parse` (with `line`
   and `column`), errors of the extraction functions and of `expectAllUsed`, and
   `error.OutOfMemory`. Two kinds tell where the memory ran out: `document_out_of_memory` (the
-  document's internal memory: in `parse`, when remembering requested names, and in `ignoreAll`)
+  document's internal memory: in `parse`, and when remembering requested names)
   and `value_out_of_memory` (producing the value: the allocator of an `...Alloc` function, or a
   custom parser or `parseXmlAlloc` hook that returned `error.OutOfMemory`).
 - It holds only the **last** error: every error overwrites it, and nothing else changes it.
@@ -470,10 +474,8 @@ The example `examples/m7/m7.zig` shows a function that takes `?*Diagnostics` fro
   name is added to a set of used names (a hash map in the document's internal arena) so that
   a second request can be detected. A name that doesn't exist in the element is also copied into
   the arena. When this fails, the name is not marked as used.
-- `ignoreAll` adds all names of the element to these sets, so it can return `error.OutOfMemory`
-  too. Then it changes nothing.
-- `text*` without an allocator, `unused`, `expectAllUsed` and `Diagnostics.format` never
-  allocate.
+- `text*` without an allocator, `ignoreAll`, `unused`, `expectAllUsed` and `Diagnostics.format`
+  never allocate.
 - `...Alloc` functions return `error.OutOfMemory` when the caller's allocator fails. Nothing is
   leaked: memory allocated for the failed value is freed before returning. Values returned by
   earlier calls belong to the caller, who frees them as usual (`errdefer`).

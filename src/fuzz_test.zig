@@ -5,11 +5,12 @@
 //!
 //! Every input must either parse or fail with `error.InvalidXml` and filled-in diagnostics.
 //! For parsed documents, random extraction calls check the usage rules:
-//! - each attribute / child name / text can be requested once, then `error.AlreadyUsed`,
+//! - each attribute / child name / text can be requested once, then `error.AlreadyUsed`;
+//!   after `ignoreAll()` every request fails with `error.AlreadyUsed`,
 //! - every error is recorded in the diagnostics, with the right kind; descriptions are valid
 //!   UTF-8 and cut correctly when the buffer is small,
 //! - `expectAllUsed()` succeeds exactly when `unused()` yields nothing,
-//! - after `ignoreAll()` on every visited element, everything is used.
+//! - after `ignoreAll()` on every element obtained from the API, everything is used.
 //! The testing allocator detects leaks, double frees and use after free.
 
 const std = @import("std");
@@ -253,14 +254,18 @@ const Ex = struct {
     diag: *Diagnostics,
     elems: std.ArrayList(*Elem) = .empty,
     used: std.ArrayList(UseKey) = .empty,
+    /// Elements on which `ignoreAll` was called.
+    ignored: std.ArrayList(*Elem) = .empty,
     failing: std.testing.FailingAllocator,
 
     fn deinit(x: *Ex) void {
         x.elems.deinit(x.gpa);
         x.used.deinit(x.gpa);
+        x.ignored.deinit(x.gpa);
     }
 
     fn wasUsed(x: *Ex, e: *Elem, kind: u8, n: []const u8) bool {
+        for (x.ignored.items) |i| if (i == e) return true;
         for (x.used.items) |u| {
             if (u.elem == e and u.kind == kind and std.mem.eql(u8, u.name, n)) return true;
         }
@@ -485,11 +490,9 @@ const Ex = struct {
                 3, 4, 5 => try x.childOp(e, x.pickName(e, 1)),
                 6, 7 => try x.textOp(e),
                 8 => if (x.r.uintLessThan(u32, 4) == 0) {
-                    try e.ignoreAll();
-                    // Everything is used now.
-                    for (e.attrs.keys()) |name| try x.used.append(x.gpa, .{ .elem = e, .kind = 0, .name = name });
-                    for (e.child_groups.keys()) |name| try x.used.append(x.gpa, .{ .elem = e, .kind = 1, .name = name });
-                    try x.used.append(x.gpa, .{ .elem = e, .kind = 2, .name = "" });
+                    e.ignoreAll();
+                    // Every request fails now.
+                    try x.ignored.append(x.gpa, e);
                 },
                 9 => {
                     var it = x.doc.unused();
@@ -510,8 +513,8 @@ const Ex = struct {
                 else => unreachable,
             }
         }
-        // Ignoring every visited element must make everything used.
-        for (x.elems.items) |e| try e.ignoreAll();
+        // Ignoring every element obtained from the API must make everything used.
+        for (x.elems.items) |e| e.ignoreAll();
         x.doc.expectAllUsed() catch |er| {
             var buf: [256]u8 = undefined;
             std.debug.print("after ignoreAll: {} {s}\n", .{ er, std.fmt.bufPrint(&buf, "{f}", .{x.diag.*}) catch "?" });
