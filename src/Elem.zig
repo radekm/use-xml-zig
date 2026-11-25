@@ -286,17 +286,15 @@ fn useName(e: *Elem, comptime kind: NameKind, wanted: []const u8) error{ Already
         .attr => &e.attrs_used,
         .child => &e.child_groups_used,
     };
-    const arena = e.ctx.arena.allocator();
-    const gop = used.getOrPut(arena, wanted) catch return e.reportDocumentOutOfMemory(wanted);
-    if (gop.found_existing) {
+    if (used.contains(wanted)) {
         e.report(.already_used, wanted, null, message);
         return error.AlreadyUsed;
     }
+    const arena = e.ctx.arena.allocator();
     // The key must not point to the caller's memory.
-    gop.key_ptr.* = if (found) |i| names[i] else arena.dupe(u8, wanted) catch {
-        _ = used.pop();
+    const key = if (found) |i| names[i] else arena.dupe(u8, wanted) catch
         return e.reportDocumentOutOfMemory(wanted);
-    };
+    used.putNoClobber(arena, key, {}) catch return e.reportDocumentOutOfMemory(wanted);
     return found;
 }
 
