@@ -17,11 +17,11 @@ local_name: []const u8,
 parent_elem: ?*Elem,
 /// Attributes without `xmlns` / `xmlns:*`: local name -> value, in document order.
 attrs: std.StringArrayHashMapUnmanaged([]const u8),
+/// Requested attribute names (existing or not). Allocated in the document's arena.
+attrs_used: std.StringArrayHashMapUnmanaged(void) = .empty,
 /// Child elements grouped by local name: local name -> elements in document order.
 /// Groups are in order of the first occurrence.
 child_groups: std.StringArrayHashMapUnmanaged([]const *Elem),
-/// Requested attribute names (existing or not). Allocated in the document's arena.
-attrs_used: std.StringArrayHashMapUnmanaged(void) = .empty,
 /// Requested names of child elements (existing or not). Allocated in the document's arena.
 child_groups_used: std.StringArrayHashMapUnmanaged(void) = .empty,
 /// Text content. Always empty when the element has child elements.
