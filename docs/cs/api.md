@@ -285,6 +285,12 @@ jako použitá, pamatuje si vyžádaná jména v areně dokumentu a zapisuje `Op
 Dokument a jeho elementy používej vždy jen z jednoho vlákna naráz. Různé dokumenty lze používat
 z různých vláken, každý s vlastní `Diagnostics`.
 
+Dokument **nealokuje jen v `parse`**: extrakční funkce si pamatují vyžádaná jména v areně dokumentu,
+která bere paměť z alokátoru předaného do `Document.parse`. Pokud tedy dokumenty používané z různých
+vláken sdílejí tento alokátor, musí být **thread-safe** (např. `std.heap.smp_allocator` nebo
+`std.heap.DebugAllocator` s `.thread_safe = true`); jinak dej každému vláknu vlastní alokátor.
+Totéž platí pro alokátory předané funkcím `...Alloc`.
+
 ## Nepoužitá data
 
 Po extrakci projde `doc.unused()` všechny *kontrolované* elementy v pořadí dokumentu. Element se

@@ -286,6 +286,12 @@ A document is **not thread-safe**, not even for reading: every extraction functi
 `Options.diagnostics`). Use a document and its elements from one thread at a time. Different
 documents can be used from different threads, each with its own `Diagnostics`.
 
+The document allocates **not only in `parse`**: extraction functions remember requested names in
+the document's arena, which takes memory from the allocator passed to `Document.parse`. So if
+documents used from different threads share that allocator, it must be **thread-safe** (e.g.
+`std.heap.smp_allocator`, or `std.heap.DebugAllocator` with `.thread_safe = true`); otherwise give
+each thread its own allocator. The same applies to allocators passed to the `...Alloc` functions.
+
 ## Unused data
 
 After extraction, `doc.unused()` walks all *checked* elements in document order. An element is

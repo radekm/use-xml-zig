@@ -204,7 +204,10 @@ arena (as in the quick start), and free the document before returning.
 
 A document is **not thread-safe**, not even for reading: every extraction function (`attr`,
 `child`, `text`, …) changes it, because it records what was used. Use one document from one thread
-at a time; different documents can be used in parallel, each with its own `Diagnostics`.
+at a time; different documents can be used in parallel, each with its own `Diagnostics`. Extraction
+functions allocate too (in the document's arena, from the allocator passed to `Document.parse`), so
+documents that share an allocator across threads need a thread-safe one (e.g.
+`std.heap.smp_allocator`).
 
 ## Errors
 

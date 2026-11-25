@@ -204,6 +204,9 @@ Obvyklý postup je parsovat ve funkci, potřebná data zkopírovat do vlastních
 Dokument **není thread-safe**, a to ani pro čtení: každá extrakční funkce (`attr`, `child`,
 `text`, …) ho mění, protože zaznamenává, co bylo použito. Jeden dokument používejte vždy jen
 z jednoho vlákna naráz; různé dokumenty lze zpracovávat paralelně, každý s vlastní `Diagnostics`.
+Extrakční funkce také alokují (v areně dokumentu, z alokátoru předaného do `Document.parse`), takže
+dokumenty, které mezi vlákny sdílejí alokátor, potřebují alokátor thread-safe (např.
+`std.heap.smp_allocator`).
 
 ## Chyby
 

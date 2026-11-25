@@ -1,8 +1,10 @@
 //! A parsed XML document.
 //!
 //! Not thread-safe, not even for reading: extraction functions change the document (they mark
-//! data as used, remember missing names and write diagnostics). Use a document and its elements
-//! from one thread at a time.
+//! data as used, remember requested names and write diagnostics). Use a document and its elements
+//! from one thread at a time. Different documents may be used from different threads, but
+//! extraction functions allocate in the document's arena (from the allocator passed to `parse`),
+//! so documents that share an allocator across threads need a thread-safe one.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -45,7 +47,9 @@ pub const Context = struct {
 };
 
 /// Parses the whole input. `input` must stay alive and unchanged until `deinit`.
-/// All internal memory comes from `gpa` (through an internal arena).
+/// All internal memory comes from `gpa` (through an internal arena), also later: extraction
+/// functions allocate in the arena. `gpa` must be thread-safe if documents sharing it are used
+/// from different threads.
 pub fn parse(gpa: Allocator, input: []const u8, options: Options) ParseError!Document {
     if (options.diagnostics) |d| recording.reset(d);
     return parseInner(gpa, input, options) catch |err| {
