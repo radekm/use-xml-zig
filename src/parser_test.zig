@@ -388,6 +388,12 @@ test "invalid: tags and attributes" {
     try expectInvalid("<:a/>", "invalid qualified name", 1, 2);
     try expectInvalid("<a x=\"1\" x=\"2\"/>", "duplicate attribute", 1, 10);
     try expectInvalid("<a p:x=\"1\" q:x=\"2\"/>", "multiple attributes with the same local name", 1, 12);
+    try expectInvalid("<a x=\"1\" p:x=\"2\"/>", "multiple attributes with the same local name", 1, 10);
+    try expectInvalid("<a p:x=\"1\" q:y=\"2\" p:x=\"3\"/>", "duplicate attribute", 1, 20);
+    try expectInvalid("<a xmlns=\"u\" xmlns=\"v\"/>", "duplicate attribute", 1, 14);
+    try expectInvalid("<a xmlns:p=\"u\" xmlns:p=\"v\"/>", "duplicate attribute", 1, 16);
+    // Errors are reported in document order.
+    try expectInvalid("<a x=\"&bad;\" x=\"2\"/>", "unknown entity (only lt, gt, amp, apos and quot are supported)", 1, 7);
     try expectInvalid("<a x=\"1\"y=\"2\"/>", "expected whitespace before attribute", 1, 9);
     try expectInvalid("<a x=1/>", "expected quoted value", 1, 6);
     try expectInvalid("<a/ >", "expected '>' after '/'", 1, 3);

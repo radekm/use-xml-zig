@@ -38,9 +38,6 @@ const RawAttr = struct {
     name_offset: usize,
     raw_value: []const u8,
     value_offset: usize,
-    // Filled in by `buildAttrs`.
-    local_name: []const u8 = "",
-    is_ns: bool = false,
 };
 
 const GroupBuilder = struct {
@@ -119,8 +116,8 @@ const Parser = struct {
     stack: std.ArrayList(Frame) = .empty,
     attrs: std.ArrayList(RawAttr) = .empty,
     scratch: std.ArrayList(u8) = .empty,
-    /// Qualified names of attributes already seen in the current start tag.
-    name_set: std.StringHashMapUnmanaged(void) = .empty,
+    /// Namespace declarations (`xmlns`, `xmlns:*`) already seen in the current start tag.
+    ns_decls: std.StringHashMapUnmanaged(void) = .empty,
     /// All elements in document order.
     all: std.ArrayList(*Elem) = .empty,
 
@@ -130,7 +127,7 @@ const Parser = struct {
         p.stack.deinit(p.gpa);
         p.attrs.deinit(p.gpa);
         p.scratch.deinit(p.gpa);
-        p.name_set.deinit(p.gpa);
+        p.ns_decls.deinit(p.gpa);
     }
 
     fn fail(p: *Parser, offset: usize, message: []const u8) error{InvalidXml} {
@@ -461,40 +458,28 @@ const Parser = struct {
     /// Checks the attributes in `p.attrs` and copies them (without `xmlns` ones) to the arena.
     fn buildAttrs(p: *Parser) Error!std.StringArrayHashMapUnmanaged([]const u8) {
         const raws = p.attrs.items;
-        if (raws.len == 0) return .empty;
-
-        p.name_set.clearRetainingCapacity();
-        const n = std.math.cast(u32, raws.len) orelse return p.fail(raws[0].name_offset, "too many attributes");
-        try p.name_set.ensureTotalCapacity(p.gpa, n);
-
-        var count: usize = 0;
-        for (raws) |*a| {
-            if (p.name_set.getOrPutAssumeCapacity(a.qname).found_existing) {
-                return p.fail(a.name_offset, "duplicate attribute");
-            }
-            const q = try p.splitQName(a.qname, a.name_offset);
-            a.local_name = q.local_name;
-            a.is_ns = std.mem.eql(u8, a.qname, "xmlns") or std.mem.eql(u8, q.prefix, "xmlns");
-            if (!a.is_ns) count += 1;
-        }
-
         var result: std.StringArrayHashMapUnmanaged([]const u8) = .empty;
-        try result.ensureTotalCapacity(p.arena, count);
-        for (raws) |a| {
-            if (a.is_ns) continue;
-            const gop = result.getOrPutAssumeCapacity(a.local_name);
-            if (gop.found_existing) return p.fail(a.name_offset, "multiple attributes with the same local name");
-            gop.value_ptr.* = "";
-        }
-
-        const values = result.values();
-        var j: usize = 0;
-        for (raws) |a| {
+        if (raws.len == 0) return result;
+        try result.ensureTotalCapacity(p.arena, raws.len);
+        p.ns_decls.clearRetainingCapacity();
+        for (raws, 0..) |a, i| {
+            const q = try p.splitQName(a.qname, a.name_offset);
             // Namespace declarations are decoded too, so that they are validated.
             const value = try p.decodeAttrValue(a.raw_value, a.value_offset);
-            if (a.is_ns) continue;
-            values[j] = value;
-            j += 1;
+            if (std.mem.eql(u8, a.qname, "xmlns") or std.mem.eql(u8, q.prefix, "xmlns")) {
+                if ((try p.ns_decls.getOrPut(p.gpa, a.qname)).found_existing) {
+                    return p.fail(a.name_offset, "duplicate attribute");
+                }
+                continue;
+            }
+            const gop = result.getOrPutAssumeCapacity(q.local_name);
+            if (gop.found_existing) {
+                const same_qname = for (raws[0..i]) |b| {
+                    if (std.mem.eql(u8, b.qname, a.qname)) break true;
+                } else false;
+                return p.fail(a.name_offset, if (same_qname) "duplicate attribute" else "multiple attributes with the same local name");
+            }
+            gop.value_ptr.* = value;
         }
         return result;
     }
