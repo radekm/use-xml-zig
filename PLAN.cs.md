@@ -68,6 +68,7 @@ nové API: [docs/cs/api.md](docs/cs/api.md).
 | 2026-11-23 | Používá se pouze větev `master`. |
 | 2026-11-25 | Jména se vyhledávají v hashovacích tabulkách (`std.StringArrayHashMapUnmanaged`): element má `attrs` a `child_groups`; použitá jména se drží v množinách `attrs_used` a `child_groups_used` (i pro neexistující jména; samostatný seznam chybějících jmen je odstraněný). Vyhledávání proto alokuje v areně dokumentu. Z elementů byl odstraněn nepoužívaný `prefix`. |
 | 2026-11-25 | `visited` je nahrazený příznakem `all_used`: `ignoreAll` ho jen nastaví (nealokuje, vrací `void`); potom každý dotaz na element selže s `AlreadyUsed`, i pro neexistující jména. Hlášení nepoužitých dat kontroluje element, pokud není ignorovaný on ani žádný předek a každé jméno na cestě od kořene bylo vyžádáno; kontrolují se tedy i podelementy skupiny, u které selhalo `TooMany`. |
+| 2026-11-25 | Elementy si neukládají index mezi sourozenci se stejným jménem; `index()` element hledá ve skupině rodiče (lineárně vůči velikosti skupiny). |
 
 ## Milníky
 

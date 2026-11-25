@@ -236,7 +236,7 @@ test "many attributes and many groups of children" {
             var name_buf: [16]u8 = undefined;
             try t.expectEqualStrings(try std.fmt.bufPrint(&name_buf, "c{d}", .{i}), name);
             try t.expectEqual(2, elems.len);
-            try t.expectEqual(1, elems[1].same_name_index);
+            try t.expectEqual(1, elems[1].index());
         }
     }
 

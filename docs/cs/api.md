@@ -118,9 +118,11 @@ Všechny funkce berou `e: *Elem`. Každá vyhledávací funkce označí to, na c
 pub fn name(e: *const Elem) []const u8;      // local name (without prefix)
 pub fn parent(e: *const Elem) ?*Elem;
 /// Index among siblings with the same name (0-based). Used in paths: /company/address[0].
+/// Takes time linear in the number of those siblings (it is searched for among them).
 pub fn index(e: *const Elem) u32;
 /// Printable path from the root, e.g. `/company/address[0]/city[0]` (use with "{f}").
-/// Printing doesn't allocate and takes time quadratic in the depth of `e`.
+/// Printing doesn't allocate and takes time quadratic in the depth of `e`, plus the time of `index`
+/// for every element on the path.
 pub fn path(e: *const Elem) Path;
 ```
 

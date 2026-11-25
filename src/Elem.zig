@@ -15,8 +15,6 @@ const Elem = @This();
 ctx: *Document.Context,
 local_name: []const u8,
 parent_elem: ?*Elem,
-/// Index among siblings with the same local name.
-same_name_index: u32,
 /// Attributes without `xmlns` / `xmlns:*`: local name -> value, in document order.
 attrs: std.StringArrayHashMapUnmanaged([]const u8),
 /// Child elements grouped by local name: local name -> elements in document order.
@@ -78,12 +76,17 @@ pub fn parent(e: *const Elem) ?*Elem {
 }
 
 /// Index among siblings with the same name (0-based). Used in paths: /company/address[0].
+/// Takes time linear in the number of those siblings (it is searched for among them).
 pub fn index(e: *const Elem) u32 {
-    return e.same_name_index;
+    const p = e.parent_elem orelse return 0;
+    const siblings = p.child_groups.get(e.local_name).?;
+    // The parser ensures that a group has at most `maxInt(u32)` elements.
+    return @intCast(std.mem.indexOfScalar(*Elem, siblings, @constCast(e)).?);
 }
 
 /// Printable path from the root, e.g. `/company/address[0]/city[0]` (use with "{f}").
-/// Printing doesn't allocate and takes time quadratic in the depth of `e`.
+/// Printing doesn't allocate and takes time quadratic in the depth of `e`, plus the time of `index`
+/// for every element on the path.
 pub fn path(e: *const Elem) Path {
     return .{ .elem = e };
 }
@@ -105,7 +108,7 @@ pub const Path = struct {
             while (up > 0) : (up -= 1) a = a.parent_elem.?;
             try w.writeByte('/');
             try w.writeAll(a.local_name);
-            if (a.parent_elem != null) try w.print("[{d}]", .{a.same_name_index});
+            if (a.parent_elem != null) try w.print("[{d}]", .{a.index()});
         }
     }
 };

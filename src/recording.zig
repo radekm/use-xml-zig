@@ -70,14 +70,14 @@ const ShortPath = struct {
             var a = sp.elem;
             for (0..level) |_| a = a.parent_elem.?;
             try w.print("/{f}", .{shortened(a.local_name)});
-            if (a.parent_elem != null) try w.print("[{d}]", .{a.same_name_index});
+            if (a.parent_elem != null) try w.print("[{d}]", .{a.index()});
         }
     }
 
     /// Upper bound of the length of the segment printed for `e`.
     fn segmentLen(e: *const Elem) usize {
         const name_len = @min(e.local_name.len, Diagnostics.max_input_len + "…".len);
-        const index_len = if (e.parent_elem != null) "[]".len + std.fmt.count("{d}", .{e.same_name_index}) else 0;
+        const index_len = if (e.parent_elem != null) "[]".len + std.fmt.count("{d}", .{e.index()}) else 0;
         return "/".len + name_len + index_len;
     }
 };

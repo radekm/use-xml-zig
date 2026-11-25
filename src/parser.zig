@@ -417,7 +417,6 @@ const Parser = struct {
         const elem = try p.arena.create(Elem);
         try p.all.append(p.gpa, elem);
         var parent: ?*Elem = null;
-        var same_name_index: u32 = 0;
         if (p.stack.items.len > 0) {
             const f = p.top();
             if (f.significant) {
@@ -426,8 +425,10 @@ const Parser = struct {
             // Only whitespace so far; it isn't part of the element's text.
             f.text.reset();
             const group = try p.findOrAddGroup(f, q, tag_start);
-            same_name_index = std.math.cast(u32, group.elems.items.len) orelse
+            // `Elem.index` returns `u32`.
+            if (group.elems.items.len == std.math.maxInt(u32)) {
                 return p.fail(tag_start, "too many child elements with the same name");
+            }
             try group.elems.append(p.gpa, elem);
             parent = f.elem;
         }
@@ -435,7 +436,6 @@ const Parser = struct {
             .ctx = p.ctx,
             .local_name = q.local_name,
             .parent_elem = parent,
-            .same_name_index = same_name_index,
             .attrs = attrs,
             .child_groups = .empty,
             .text_content = "",
