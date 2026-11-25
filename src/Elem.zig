@@ -14,7 +14,6 @@ const Elem = @This();
 
 ctx: *Document.Context,
 local_name: []const u8,
-prefix: []const u8,
 parent_elem: ?*Elem,
 /// Index among siblings with the same local name.
 same_name_index: u32,
@@ -76,7 +75,6 @@ pub const Missing = struct {
 /// Internal: an attribute and its usage flag.
 pub const Attr = struct {
     local_name: []const u8,
-    prefix: []const u8,
     value: []const u8,
     used: bool = false,
 };
@@ -84,7 +82,6 @@ pub const Attr = struct {
 /// Internal: child elements with the same local name and their usage flag.
 pub const Group = struct {
     local_name: []const u8,
-    prefix: []const u8,
     elems: []const *Elem,
     used: bool = false,
 };

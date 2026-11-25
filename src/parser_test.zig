@@ -139,7 +139,6 @@ test "namespace declarations are skipped and prefixes ignored" {
 
     const table = group(root, "table")[0];
     try t.expectEqualStrings("table", table.name());
-    try t.expectEqualStrings("h", table.prefix);
     try t.expectEqualStrings("1", attrValue(table, "border").?);
     const td = group(group(table, "tr")[0], "td")[0];
     try t.expectEqualStrings("Cell", td.text_content);

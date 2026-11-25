@@ -39,7 +39,6 @@ const RawAttr = struct {
     raw_value: []const u8,
     value_offset: usize,
     // Filled in by `buildAttrs`.
-    prefix: []const u8 = "",
     local_name: []const u8 = "",
     is_ns: bool = false,
 };
@@ -443,7 +442,6 @@ const Parser = struct {
         elem.* = .{
             .ctx = p.ctx,
             .local_name = q.local_name,
-            .prefix = q.prefix,
             .parent_elem = parent,
             .same_name_index = same_name_index,
             .attrs = attrs,
@@ -509,7 +507,6 @@ const Parser = struct {
             } else false;
             if (duplicate) return p.fail(a.name_offset, "duplicate attribute");
             const q = try p.splitQName(a.qname, a.name_offset);
-            a.prefix = q.prefix;
             a.local_name = q.local_name;
             a.is_ns = std.mem.eql(u8, a.qname, "xmlns") or std.mem.eql(u8, q.prefix, "xmlns");
             if (!a.is_ns) count += 1;
@@ -532,7 +529,7 @@ const Parser = struct {
             // Namespace declarations are decoded too, so that they are validated.
             const value = try p.decodeAttrValue(a.raw_value, a.value_offset);
             if (a.is_ns) continue;
-            result[j] = .{ .local_name = a.local_name, .prefix = a.prefix, .value = value };
+            result[j] = .{ .local_name = a.local_name, .value = value };
             j += 1;
         }
         return result;
@@ -566,7 +563,6 @@ const Parser = struct {
             for (groups, f.groups.items) |*g, b| {
                 g.* = .{
                     .local_name = b.local_name,
-                    .prefix = b.prefix,
                     .elems = try p.arena.dupe(*Elem, b.elems.items),
                 };
             }
