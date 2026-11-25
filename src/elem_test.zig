@@ -180,6 +180,25 @@ test "the name passed in may be a temporary buffer" {
     try t.expectError(error.AlreadyUsed, f.root().attr([]const u8, "zz"));
 }
 
+test "selector overlapping the diagnostics buffer" {
+    // Regression test: the name may point into the diagnostics buffer itself. Formerly this
+    // panicked with "@memcpy arguments alias" (Debug, ReleaseSafe) or was undefined behaviour
+    // (ReleaseFast, ReleaseSmall). See the comment in `recording.record`.
+    var f = try Fixture.init("<r><x/></r>");
+    defer f.deinit();
+    const r = f.root();
+    try t.expectError(error.Missing, r.attr([]const u8, "missing_attribute_name"));
+    try f.expectDiag(.missing, "/r: \"missing_attribute_name\": attribute is missing");
+
+    // `"/r: \"` is 5 bytes; the name is `missing` from the previous description.
+    try t.expectError(error.Missing, r.attr([]const u8, f.box.diag.message()[5..12]));
+    try f.expectDiag(.missing, "/r: \"missing\": attribute is missing");
+
+    // The whole description as a child name: it overlaps the start of the buffer too.
+    try t.expectError(error.Missing, r.child(f.box.diag.message()));
+    try f.expectDiag(.missing, "/r: \"/r: \"missing\": attribute is missing\": expected exactly one child element, found none");
+}
+
 test "text of an element with child elements" {
     var f = try Fixture.init("<a> <b/> </a>");
     defer f.deinit();

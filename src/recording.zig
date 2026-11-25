@@ -32,15 +32,45 @@ pub fn record(
     input: ?[]const u8,
     msg: []const u8,
 ) void {
+    // DO NOT REMOVE: the selector is copied before `d.buf` is overwritten.
+    //
+    // `selector` is a name passed in by the user (`e.attr(T, name)`, `e.child(name)`, …) and may
+    // point anywhere, also into `d.buf` itself, e.g. `e.attr(T, diag.message()[i..j])` or a name
+    // kept in the same buffer. Formerly the description was written into `d.buf` while reading
+    // the selector from it: the source and the destination of the copy overlapped, so Debug and
+    // ReleaseSafe panicked with "@memcpy arguments alias" and ReleaseFast / ReleaseSmall had
+    // undefined behaviour (a garbled description). Regression tests: "selector overlapping the
+    // diagnostics buffer" here and in `elem_test.zig`.
+    //
+    // The other inputs can't overlap `d.buf`: `msg` is static, `input` is a value from the
+    // document (its arena, or the input, which must not change while the document lives) and
+    // `elem` points into the document.
+    var selector_buf: [max_shortened_len]u8 = undefined;
+    const selector_copy: ?[]const u8 = if (selector) |s| copyShortened(&selector_buf, s) else null;
+
     reset(d);
     d.kind = kind;
     var w: std.Io.Writer = .fixed(d.buf);
-    finish(d, &w, print(&w, elem, selector, input, msg));
+    finish(d, &w, print(&w, elem, selector_copy, input, msg));
 }
 
-fn print(w: *std.Io.Writer, elem: ?*const Elem, selector: ?[]const u8, input: ?[]const u8, msg: []const u8) std.Io.Writer.Error!void {
+/// Upper bound of the length of `shortened(s)` printed for any `s`.
+const max_shortened_len = Diagnostics.max_input_len + "…".len;
+
+/// Prints `shortened(s)` into `buf` and returns the printed part. Used by `record`, so that the
+/// selector is copied out before `Diagnostics.buf` is written.
+fn copyShortened(buf: *[max_shortened_len]u8, s: []const u8) []const u8 {
+    var w: std.Io.Writer = .fixed(buf);
+    // `Shortened` never prints more than `max_shortened_len` bytes, so this doesn't fail; if it
+    // did, the printed prefix would still be a safe (if shorter) description.
+    w.print("{f}", .{shortened(s)}) catch {};
+    return w.buffered();
+}
+
+/// `shortened_selector` was already shortened by `copyShortened`.
+fn print(w: *std.Io.Writer, elem: ?*const Elem, shortened_selector: ?[]const u8, input: ?[]const u8, msg: []const u8) std.Io.Writer.Error!void {
     if (elem) |e| try w.print("{f}: ", .{ShortPath{ .elem = e }});
-    if (selector) |s| try w.print("\"{f}\": ", .{shortened(s)});
+    if (shortened_selector) |s| try w.print("\"{s}\": ", .{s});
     try w.writeAll(msg);
     if (input) |s| try w.print(" (input: \"{f}\")", .{shortened(s)});
 }
@@ -257,4 +287,22 @@ test "long inputs and small buffers are cut at UTF-8 boundaries" {
     record(&d, .too_many, null, "x", null, "too many");
     try t.expectEqual(Diagnostics.Kind.too_many, d.kind);
     try t.expectEqualStrings("", d.message());
+}
+
+test "selector overlapping the diagnostics buffer" {
+    // Regression test, see the comment in `record`: the selector is read from the buffer that the
+    // description is written into.
+    var buf: [2 * Diagnostics.max_input_len]u8 = undefined;
+    var d: Diagnostics = .init(&buf);
+    record(&d, .missing, null, "abc", null, "first");
+    try t.expectEqualStrings("\"abc\": first", d.message());
+    record(&d, .missing, null, d.message()[1..4], null, "second");
+    try t.expectEqualStrings("\"abc\": second", d.message());
+
+    // A long selector in the buffer is shortened like any other.
+    @memset(&buf, 'x');
+    record(&d, .missing, null, &buf, null, "third");
+    try t.expect(!d.truncated);
+    try t.expect(std.mem.endsWith(u8, d.message(), "x…\": third"));
+    try t.expectEqual(1 + Diagnostics.max_input_len + "…\": third".len, d.message().len);
 }

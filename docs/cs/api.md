@@ -459,6 +459,10 @@ var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
   ořízne se na hranici UTF-8 znaku a nastaví se `truncated`. S prázdným bufferem (`.init(&.{})`) se
   zaznamená jen `kind`, `line` a `column` a `"{f}"` vypíše druh chyby. Popis je vždy platné
   UTF-8: neplatné UTF-8 ve jménech, která předáte, se nahradí znakem U+FFFD.
+- Jméno, které předáte (`attr`, `child`, …), může ukazovat kamkoli, **i do bufferu `Diagnostics`**
+  (např. část `diag.message()` z předchozí chyby): zkopíruje se dřív, než se zapíše popis. Dřívější
+  verze zapisovaly popis a přitom četly jméno ze stejného bufferu, což v Debug / ReleaseSafe
+  způsobilo panic a v ReleaseFast / ReleaseSmall nedefinované chování.
 - Bez `Options.diagnostics` se nic nezaznamená ani neformátuje, takže chyby nic navíc nestojí
   (např. když se `childOpt` / `catch` používá k řízení toku).
 

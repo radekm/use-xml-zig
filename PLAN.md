@@ -69,6 +69,7 @@ was designed instead: [docs/en/api.md](docs/en/api.md).
 | 2026-11-25 | Names are looked up in hash maps (`std.StringArrayHashMapUnmanaged`): an element has `attrs` and `child_groups`; used names are kept in the sets `attrs_used` and `child_groups_used` (also for names that don't exist; the separate list of missing names is removed). So lookups allocate in the document's arena. The unused `prefix` was removed from elements. |
 | 2026-11-25 | `visited` is replaced by `all_used`: `ignoreAll` only sets it (no allocation, returns `void`); afterwards every request on the element fails with `AlreadyUsed`, even for names that don't exist. The unused report checks an element if no ancestor (or the element) is ignored and every name on the path from the root was requested; so the children of a group that failed with `TooMany` are checked too. |
 | 2026-11-25 | Elements don't store their index among siblings with the same name; `index()` searches for the element in its parent's group (linear in the size of the group). |
+| 2026-11-25 | Bug fix (review): `recording.record` copies the selector (a name passed in by the user) into a stack buffer before it overwrites `Diagnostics.buf`. Before, a name pointing into that buffer (e.g. a part of `diag.message()`) made the copy overlap: a panic "@memcpy arguments alias" in Debug / ReleaseSafe, undefined behaviour in ReleaseFast / ReleaseSmall. The copy must stay; regression tests "selector overlapping the diagnostics buffer" in `recording.zig` and `elem_test.zig`. |
 
 ## Milestones
 

@@ -463,6 +463,11 @@ var doc = try use_xml.Document.parse(gpa, input, .{ .diagnostics = &diag });
   `truncated` is set. With an empty buffer (`.init(&.{})`) only `kind`, `line` and `column` are
   recorded, and `"{f}"` prints the kind. The description is always valid UTF-8: invalid UTF-8 in
   names you pass in is replaced by U+FFFD.
+- A name you pass in (`attr`, `child`, …) may point anywhere, **also into the `Diagnostics`
+  buffer** (e.g. a part of `diag.message()` from a previous error): it is copied before the
+  description is written. Earlier versions wrote the description while reading the name from the
+  same buffer, which panicked in Debug / ReleaseSafe and was undefined behaviour in ReleaseFast /
+  ReleaseSmall.
 - Without `Options.diagnostics` nothing is recorded or formatted, so errors cost nothing extra
   (e.g. when `childOpt` / `catch` is used for control flow).
 
